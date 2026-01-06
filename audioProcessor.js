@@ -54,35 +54,43 @@ class AudioProcessor {
     }
 
 
-    saveFile(audioBuffer, loopPosition, crossfadeDuration) {
-        // トラック1を生成
-        const track1Buffer = this.track1Processor.createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration);
-        const wav1 = this.bufferToWav(track1Buffer);
-        const blob1 = new Blob([wav1], { type: 'audio/wav' });
-        const url1 = URL.createObjectURL(blob1);
-        const a1 = document.createElement('a');
-        a1.href = url1;
-        a1.download = 'loopmaker_track1.wav';
-        document.body.appendChild(a1);
-        a1.click();
-        document.body.removeChild(a1);
-        URL.revokeObjectURL(url1);
+    // トラック1と2をミックスしたバッファを生成
+    mixBuffers(track1Buffer, track2Buffer) {
+        const sampleRate = track1Buffer.sampleRate;
+        const numChannels = track1Buffer.numberOfChannels;
+        
+        // 2つのバッファの長い方を基準にする
+        const maxLength = Math.max(track1Buffer.length, track2Buffer.length);
+        const mixedBuffer = this.audioContext.createBuffer(numChannels, maxLength, sampleRate);
 
-        // トラック2を生成
-        const track2Buffer = this.track2Processor.createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration);
-        const wav2 = this.bufferToWav(track2Buffer);
-        const blob2 = new Blob([wav2], { type: 'audio/wav' });
-        const url2 = URL.createObjectURL(blob2);
-        const a2 = document.createElement('a');
-        a2.href = url2;
-        a2.download = 'loopmaker_track2.wav';
-        document.body.appendChild(a2);
-        // 少し遅延させて2つ目のダウンロードを実行
-        setTimeout(() => {
-            a2.click();
-            document.body.removeChild(a2);
-            URL.revokeObjectURL(url2);
-        }, 100);
+        for (let channel = 0; channel < numChannels; channel++) {
+            const track1Data = track1Buffer.getChannelData(channel);
+            const track2Data = track2Buffer.getChannelData(channel);
+            const mixedData = mixedBuffer.getChannelData(channel);
+
+            for (let i = 0; i < maxLength; i++) {
+                const track1Value = i < track1Data.length ? track1Data[i] : 0;
+                const track2Value = i < track2Data.length ? track2Data[i] : 0;
+                // 2つのトラックをミックス（合計が1.0を超えないようにクリッピング）
+                mixedData[i] = Math.max(-1, Math.min(1, track1Value + track2Value));
+            }
+        }
+
+        return mixedBuffer;
+    }
+
+    // ミックスしたバッファを保存
+    saveMixedBuffer(mixedBuffer) {
+        const wav = this.bufferToWav(mixedBuffer);
+        const blob = new Blob([wav], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'loopmaker_output.wav';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 }
 

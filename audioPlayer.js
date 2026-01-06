@@ -14,61 +14,51 @@ class AudioPlayer {
         this.track2Processor = new Track2Processor(audioContext);
     }
 
-    playPreview(audioBuffer, loopPosition, crossfadeDuration) {
-        if (!audioBuffer || this.isPlaying) return false;
+    // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
+    playPreviewWithBuffers(track1Buffer, track2Buffer) {
+        if (!track1Buffer || !track2Buffer || this.isPlaying) return false;
 
         try {
-            const loopStartTime = audioBuffer.duration * loopPosition;
-            const crossfadeStartTime = loopStartTime - crossfadeDuration;
-            const loopDuration = loopStartTime;
-
-            // メインループ: 0からループ位置までをループ再生（クロスフェード適用）
-            const loopBuffer = this.track1Processor.createLoopBuffer(audioBuffer, loopStartTime, crossfadeStartTime, crossfadeDuration);
-            const mainSource = this.audioContext.createBufferSource();
-            mainSource.buffer = loopBuffer;
-            mainSource.loop = true;
-            mainSource.loopStart = 0;
-            mainSource.loopEnd = loopDuration;
-            mainSource.connect(this.audioContext.destination);
-
-            // トラック1: フェードイン部分をループ再生（クロスフェード区間）
+            // トラック1の加工後のバッファの長さをループ期間として使用
+            const loopDuration = track1Buffer.duration;
+            
+            // トラック1: 加工後のバッファをループ再生（トラック1の加工後の範囲でループ）
             const source1 = this.audioContext.createBufferSource();
             this.gainNode1 = this.audioContext.createGain();
             this.analyser1 = this.audioContext.createAnalyser();
             this.analyser1.fftSize = 256;
             this.analyser1.smoothingTimeConstant = 0.8;
             
-            source1.buffer = this.track1Processor.createFadeInBuffer(audioBuffer, crossfadeStartTime, crossfadeDuration);
+            source1.buffer = track1Buffer;
             source1.loop = true;
             source1.loopStart = 0;
-            source1.loopEnd = crossfadeDuration;
+            source1.loopEnd = loopDuration; // トラック1の加工後の範囲でループ
             
             source1.connect(this.gainNode1);
             this.gainNode1.connect(this.analyser1);
             this.analyser1.connect(this.audioContext.destination);
             
-            // トラック2: フェードアウト部分をループ再生（ループ位置から、フェードアウト後無音を含めてループ位置まで）
+            // トラック2: 加工後のバッファをループ再生（トラック1と同じ範囲でループ）
             const source2 = this.audioContext.createBufferSource();
             this.gainNode2 = this.audioContext.createGain();
             this.analyser2 = this.audioContext.createAnalyser();
             this.analyser2.fftSize = 256;
             this.analyser2.smoothingTimeConstant = 0.8;
             
-            source2.buffer = this.track2Processor.createFadeOutBufferWithSilence(audioBuffer, loopStartTime, crossfadeDuration, loopDuration);
+            source2.buffer = track2Buffer;
             source2.loop = true;
             source2.loopStart = 0;
-            source2.loopEnd = loopDuration;
+            source2.loopEnd = loopDuration; // トラック1と同じ範囲でループ
             
             source2.connect(this.gainNode2);
             this.gainNode2.connect(this.analyser2);
             this.analyser2.connect(this.audioContext.destination);
 
-            this.sourceNodes = [mainSource, source1, source2, this.gainNode1, this.gainNode2, this.analyser1, this.analyser2];
+            this.sourceNodes = [source1, source2, this.gainNode1, this.gainNode2, this.analyser1, this.analyser2];
             this.loopDuration = loopDuration;
 
-            // メインループ（0からループ位置まで）と2トラックを同時に再生
+            // 2トラックを同時に再生（トラック1の加工後の範囲でループ）
             const startOffset = this.audioContext.currentTime;
-            mainSource.start(startOffset);
             source1.start(startOffset);
             source2.start(startOffset);
 

@@ -4,30 +4,42 @@ class Track1Processor {
         this.audioContext = audioContext;
     }
 
-    // 再生用: ループバッファ生成（クロスフェード区間でフェードイン適用）
-    createLoopBuffer(audioBuffer, loopStartTime, crossfadeStartTime, crossfadeDuration) {
+    // 再生用: ループバッファ生成（オーバーラップ率の分後半をカットし、フェードイン適用）
+    createLoopBuffer(audioBuffer, overlapRate) {
+        if (overlapRate === 0) {
+            return audioBuffer;
+        }
+        
+        // オーバーラップ率からカットする長さを計算（50%で半分になる）
+        const cutDuration = audioBuffer.duration * (overlapRate / 100);
+        const waveformStartTime = 0;
+        const waveformEndTime = audioBuffer.duration - cutDuration;
+        const waveformDuration = waveformEndTime - waveformStartTime;
+        
+        if (waveformDuration <= 0) {
+            return audioBuffer;
+        }
+
         const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(loopStartTime * sampleRate);
+        const frameCount = Math.floor(waveformDuration * sampleRate);
         const numChannels = audioBuffer.numberOfChannels;
         const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-        const crossfadeStartSample = Math.floor(crossfadeStartTime * sampleRate);
-        const crossfadeFrameCount = Math.floor(crossfadeDuration * sampleRate);
+
+        const waveformStartSample = Math.floor(waveformStartTime * sampleRate);
+        const waveformEndSample = Math.floor(waveformEndTime * sampleRate);
 
         for (let channel = 0; channel < numChannels; channel++) {
             const inputData = audioBuffer.getChannelData(channel);
             const outputData = buffer.getChannelData(channel);
 
             for (let i = 0; i < frameCount; i++) {
-                if (i < inputData.length) {
-                    let value = inputData[i];
-
-                    // クロスフェード区間でフェードインを適用
-                    if (i >= crossfadeStartSample && i < crossfadeStartSample + crossfadeFrameCount) {
-                        const fadeInProgress = (i - crossfadeStartSample) / crossfadeFrameCount;
-                        value *= fadeInProgress;
-                    }
-
-                    outputData[i] = value;
+                const inputIndex = waveformStartSample + i;
+                if (inputIndex < inputData.length && inputIndex < waveformEndSample) {
+                    // フェードインを適用（0から1まで）
+                    const fadeInProgress = i / frameCount;
+                    outputData[i] = inputData[inputIndex] * fadeInProgress;
+                } else {
+                    outputData[i] = 0;
                 }
             }
         }
@@ -35,61 +47,49 @@ class Track1Processor {
         return buffer;
     }
 
-    // 再生用: フェードインバッファ生成（クロスフェード区間）
-    createFadeInBuffer(audioBuffer, startTime, duration) {
-        const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(duration * sampleRate);
-        const numChannels = audioBuffer.numberOfChannels;
-        const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-
-        for (let channel = 0; channel < numChannels; channel++) {
-            const inputData = audioBuffer.getChannelData(channel);
-            const outputData = buffer.getChannelData(channel);
-            const startSample = Math.floor(startTime * sampleRate);
-
-            for (let i = 0; i < frameCount; i++) {
-                const inputIndex = startSample + i;
-                if (inputIndex < inputData.length) {
-                    const fadeIn = i / frameCount; // 0 to 1
-                    outputData[i] = inputData[inputIndex] * fadeIn;
-                }
-            }
-        }
-
-        return buffer;
+    // 再生用: フェードインバッファ生成（オーバーラップ率の分後半をカットし、フェードイン適用）
+    createFadeInBuffer(audioBuffer, overlapRate) {
+        // createLoopBufferと同じ処理
+        return this.createLoopBuffer(audioBuffer, overlapRate);
     }
 
-    // 保存用: トラック1の保存バッファ生成
-    createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration) {
-        const loopStartTime = audioBuffer.duration * loopPosition;
-        const crossfadeStartTime = loopStartTime - crossfadeDuration;
-        const effectiveDuration = loopStartTime;
+    // 保存用: トラック1の保存バッファ生成（オーバーラップ率の分後半をカットし、フェードイン適用）
+    createSaveBuffer(audioBuffer, overlapRate) {
+        // オーバーラップ率が0の場合は何も処理しない
+        if (overlapRate === 0) {
+            return audioBuffer;
+        }
+        
+        // オーバーラップ率からカットする長さを計算（50%で半分になる）
+        const cutDuration = audioBuffer.duration * (overlapRate / 100);
+        const waveformStartTime = 0;
+        const waveformEndTime = audioBuffer.duration - cutDuration;
+        const waveformDuration = waveformEndTime - waveformStartTime;
+        
+        if (waveformDuration <= 0) {
+            return audioBuffer;
+        }
 
-        // 新しいバッファを作成（ループ位置までの長さ）
         const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(effectiveDuration * sampleRate);
+        const frameCount = Math.floor(waveformDuration * sampleRate);
         const numChannels = audioBuffer.numberOfChannels;
         const newBuffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
 
-        // クロスフェード区間の開始位置
-        const crossfadeStartSample = Math.floor(crossfadeStartTime * sampleRate);
-        const crossfadeFrameCount = Math.floor(crossfadeDuration * sampleRate);
+        const waveformStartSample = Math.floor(waveformStartTime * sampleRate);
+        const waveformEndSample = Math.floor(waveformEndTime * sampleRate);
 
         for (let channel = 0; channel < numChannels; channel++) {
             const inputData = audioBuffer.getChannelData(channel);
             const outputData = newBuffer.getChannelData(channel);
 
             for (let i = 0; i < frameCount; i++) {
-                if (i < inputData.length) {
-                    let value = inputData[i];
-
-                    // クロスフェード区間でフェードインを適用
-                    if (i >= crossfadeStartSample && i < crossfadeStartSample + crossfadeFrameCount) {
-                        const fadeInProgress = (i - crossfadeStartSample) / crossfadeFrameCount;
-                        value *= fadeInProgress;
-                    }
-
-                    outputData[i] = value;
+                const inputIndex = waveformStartSample + i;
+                if (inputIndex < inputData.length && inputIndex < waveformEndSample) {
+                    // フェードインを適用（0から1まで）
+                    const fadeInProgress = i / frameCount;
+                    outputData[i] = inputData[inputIndex] * fadeInProgress;
+                } else {
+                    outputData[i] = 0;
                 }
             }
         }

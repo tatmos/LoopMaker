@@ -2,12 +2,14 @@
 class LoopMaker {
     constructor() {
         this.audioContext = null;
-        this.audioBuffer = null;
+        this.originalBuffer = null; // 元波形のバッファ
+        this.track1Buffer = null; // トラック1の加工後のバッファ
+        this.track2Buffer = null; // トラック2の加工後のバッファ
+        this.mixedBuffer = null; // トラック1と2をミックスしたバッファ
         this.audioProcessor = null;
         this.audioPlayer = null;
         this.waveformRenderer = null;
-        this.loopPosition = 0.75; // 初期値: 75% (3/4)
-        this.crossfadeDuration = 0; // クロスフェード区間の長さ（秒）
+        this.overlapRate = 0; // オーバーラップ率（0-50%）
         this.animationFrameId = null;
         
         this.initializeElements();
@@ -19,8 +21,8 @@ class LoopMaker {
         this.saveBtn = document.getElementById('save-btn');
         this.playBtn = document.getElementById('play-btn');
         this.stopBtn = document.getElementById('stop-btn');
-        this.loopPositionSlider = document.getElementById('loop-position');
-        this.loopPositionValue = document.getElementById('loop-position-value');
+        this.overlapRateSlider = document.getElementById('overlap-rate');
+        this.overlapRateValue = document.getElementById('overlap-rate-value');
         this.status = document.getElementById('status');
         this.muteTrack1Btn = document.getElementById('mute-track1');
         this.muteTrack2Btn = document.getElementById('mute-track2');
@@ -44,7 +46,7 @@ class LoopMaker {
         this.saveBtn.addEventListener('click', () => this.saveFile());
         this.playBtn.addEventListener('click', () => this.playPreview());
         this.stopBtn.addEventListener('click', () => this.stopPreview());
-        this.loopPositionSlider.addEventListener('input', (e) => this.updateLoopPosition(e));
+        this.overlapRateSlider.addEventListener('input', (e) => this.updateOverlapRate(e));
         this.muteTrack1Btn.addEventListener('click', () => this.toggleMuteTrack1());
         this.muteTrack2Btn.addEventListener('click', () => this.toggleMuteTrack2());
         
@@ -75,17 +77,17 @@ class LoopMaker {
         try {
             const arrayBuffer = await file.arrayBuffer();
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            this.originalBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
             this.audioProcessor = new AudioProcessor(this.audioContext);
             this.audioPlayer = new AudioPlayer(this.audioContext);
             
-            // 初期ループ位置を3/4に設定
-            this.loopPosition = 0.75;
-            this.loopPositionSlider.value = 75;
-            this.updateLoopPositionValue();
+            // 初期オーバーラップ率を0に設定
+            this.overlapRate = 0;
+            this.overlapRateSlider.value = 0;
+            this.updateOverlapRateValue();
             
-            // クロスフェード区間を計算（波形の5%程度）
-            this.crossfadeDuration = this.audioBuffer.duration * 0.05;
+            // バッファを生成
+            this.updateBuffers();
             
             this.drawWaveforms();
             this.enableControls();
@@ -96,10 +98,30 @@ class LoopMaker {
         }
     }
 
+    updateBuffers() {
+        if (!this.originalBuffer || !this.audioProcessor) return;
+        
+        // トラック1の加工後のバッファを生成
+        this.track1Buffer = this.audioProcessor.track1Processor.createSaveBuffer(
+            this.originalBuffer, 
+            this.overlapRate
+        );
+        
+        // トラック2の加工後のバッファを生成（トラック1と同じサイズにする）
+        this.track2Buffer = this.audioProcessor.track2Processor.createSaveBuffer(
+            this.originalBuffer, 
+            this.overlapRate,
+            this.track1Buffer.duration
+        );
+        
+        // トラック1と2をミックスしたバッファを生成
+        this.mixedBuffer = this.audioProcessor.mixBuffers(this.track1Buffer, this.track2Buffer);
+    }
+
     drawWaveforms() {
-        if (!this.audioBuffer || !this.waveformRenderer) return;
+        if (!this.originalBuffer || !this.waveformRenderer) return;
         const currentTime = this.audioPlayer ? this.audioPlayer.getCurrentPlaybackTime() : null;
-        this.waveformRenderer.render(this.audioBuffer, this.loopPosition, this.crossfadeDuration, currentTime);
+        this.waveformRenderer.render(this.originalBuffer, this.overlapRate, currentTime);
     }
 
     startPlaybackAnimation() {
@@ -164,18 +186,19 @@ class LoopMaker {
         this.drawWaveforms();
     }
 
-    updateLoopPosition(event) {
-        this.loopPosition = parseFloat(event.target.value) / 100;
-        this.updateLoopPositionValue();
+    updateOverlapRate(event) {
+        this.overlapRate = parseFloat(event.target.value);
+        this.updateOverlapRateValue();
+        this.updateBuffers();
         this.drawWaveforms();
     }
 
-    updateLoopPositionValue() {
-        this.loopPositionValue.textContent = Math.round(this.loopPosition * 100) + '%';
+    updateOverlapRateValue() {
+        this.overlapRateValue.textContent = Math.round(this.overlapRate) + '%';
     }
 
     togglePlayback() {
-        if (!this.audioBuffer || !this.audioPlayer) return;
+        if (!this.originalBuffer || !this.audioPlayer) return;
         
         if (this.audioPlayer.isPlaying) {
             this.stopPreview();
@@ -185,13 +208,14 @@ class LoopMaker {
     }
 
     async playPreview() {
-        if (!this.audioBuffer || !this.audioPlayer) return;
+        if (!this.originalBuffer || !this.audioPlayer || !this.track1Buffer || !this.track2Buffer) return;
 
         try {
             this.playBtn.disabled = true;
             this.stopBtn.disabled = false;
 
-            this.audioPlayer.playPreview(this.audioBuffer, this.loopPosition, this.crossfadeDuration);
+            // トラック1と2の加工後のバッファを再生
+            this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer);
             this.startPlaybackAnimation();
             this.showStatus('再生中...', 'info');
         } catch (error) {
@@ -213,11 +237,12 @@ class LoopMaker {
     }
 
     async saveFile() {
-        if (!this.audioBuffer || !this.audioProcessor) return;
+        if (!this.mixedBuffer || !this.audioProcessor) return;
 
         try {
             this.showStatus('ファイルを生成中...', 'info');
-            this.audioProcessor.saveFile(this.audioBuffer, this.loopPosition, this.crossfadeDuration);
+            // ミックスしたバッファを保存
+            this.audioProcessor.saveMixedBuffer(this.mixedBuffer);
             this.showStatus('ファイルを保存しました', 'success');
         } catch (error) {
             this.showStatus('保存エラー: ' + error.message, 'error');
@@ -228,7 +253,7 @@ class LoopMaker {
     enableControls() {
         this.saveBtn.disabled = false;
         this.playBtn.disabled = false;
-        this.loopPositionSlider.disabled = false;
+        this.overlapRateSlider.disabled = false;
     }
 
     showStatus(message, type = 'info') {

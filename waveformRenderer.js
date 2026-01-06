@@ -9,7 +9,7 @@ class WaveformRenderer {
         this.ruler2 = ruler2;
     }
 
-    render(audioBuffer, loopPosition, crossfadeDuration, currentPlaybackTime = null) {
+    render(audioBuffer, overlapRate, currentPlaybackTime = null) {
         if (!audioBuffer) return;
 
         const width = this.canvas1.width = this.canvas1.offsetWidth;
@@ -17,24 +17,25 @@ class WaveformRenderer {
         this.canvas2.width = width;
         this.canvas2.height = height;
 
-        const loopStartTime = audioBuffer.duration * loopPosition;
-        const crossfadeStartTime = loopStartTime - crossfadeDuration;
-        const effectiveDuration = loopStartTime;
+        // オーバーラップ率からカットする長さを計算
+        const cutDuration = audioBuffer.duration * (overlapRate / 100);
+        const track1Duration = audioBuffer.duration - cutDuration;
+        const track2StartTime = audioBuffer.duration - cutDuration;
 
-        // トラック1: 0秒からループ位置まで（クロスフェード区間でフェードイン適用）
-        this.drawTrack1(audioBuffer, 0, effectiveDuration, crossfadeStartTime, crossfadeDuration, effectiveDuration, width, height);
+        // トラック1: 0からオーバーラップ率の範囲を引いた位置まで表示（フェードイン）
+        this.drawTrack1(audioBuffer, 0, track1Duration, track1Duration, width, height);
         
-        // トラック2: ループ位置から波形最後まで（フェードアウト適用）
-        const track2Duration = audioBuffer.duration - loopStartTime;
-        this.drawTrack2(audioBuffer, loopStartTime, track2Duration, loopStartTime, track2Duration, effectiveDuration, width, height);
+        // トラック2: オーバーラップ率分引いた位置から波形最後まで（フェードアウト）
+        const track2Duration = audioBuffer.duration - track2StartTime;
+        this.drawTrack2(audioBuffer, track2StartTime, track2Duration, track1Duration, width, height);
         
         // 再生位置ラインを描画
         if (currentPlaybackTime !== null) {
-            this.drawPlaybackPosition(currentPlaybackTime, effectiveDuration, width, height);
+            this.drawPlaybackPosition(currentPlaybackTime, track1Duration, width, height);
         }
         
         // タイムルーラーを描画
-        this.drawTimeRuler(effectiveDuration, width);
+        this.drawTimeRuler(track1Duration, width);
     }
 
     drawPlaybackPosition(currentTime, totalDuration, width, height) {
@@ -62,14 +63,14 @@ class WaveformRenderer {
         ctx2.stroke();
     }
 
-    drawTrack1(audioBuffer, displayStartTime, displayDuration, crossfadeStartTime, crossfadeDuration, totalDuration, width, height) {
+    drawTrack1(audioBuffer, waveformStartTime, waveformDuration, totalDuration, width, height) {
         const ctx = this.ctx1;
         ctx.clearRect(0, 0, width, height);
         
         if (!audioBuffer || totalDuration <= 0) return;
 
-        const waveformStartTime = displayStartTime;
-        const waveformEndTime = displayStartTime + displayDuration;
+        const waveformEndTime = waveformStartTime + waveformDuration;
+        const displayStartTime = 0;
         const displayEndTime = totalDuration;
 
         WaveformDrawer.drawWaveform(
@@ -82,31 +83,29 @@ class WaveformRenderer {
             width,
             height,
             {
-                fadeInStartTime: crossfadeStartTime,
-                fadeInEndTime: crossfadeStartTime + crossfadeDuration,
+                // フェードインを適用（0から1まで）
+                fadeInStartTime: waveformStartTime,
+                fadeInEndTime: waveformEndTime,
                 drawDCOffset: true,
                 backgroundColor: '#e0e0e0'
             }
         );
     }
 
-    drawTrack2(audioBuffer, waveformStartTime, waveformDuration, fadeOutStartTime, fadeOutDuration, totalDuration, width, height) {
+    drawTrack2(audioBuffer, waveformStartTime, waveformDuration, totalDuration, width, height) {
         const ctx = this.ctx2;
         ctx.clearRect(0, 0, width, height);
         
         if (!audioBuffer || totalDuration <= 0) return;
 
-        // フェードアウトは波形開始位置（ループ位置）から開始
-        const fadeOutEndTime = fadeOutStartTime + fadeOutDuration;
-        // フェードアウト終了位置以降は無音（波形を表示しない）
-        const waveformEndTime = fadeOutEndTime;
-        
-        // トラック2はループ位置からフェードアウト終了位置までを表示
-        // 表示範囲は0からループ位置まで（totalDuration）だが、
-        // ループ位置が左端（x=0）になるように表示する
-        // つまり、表示範囲の開始をループ位置に合わせる
-        const displayStartTime = waveformStartTime;
-        const displayEndTime = waveformStartTime + totalDuration;
+        const waveformEndTime = waveformStartTime + waveformDuration;
+        // 表示範囲は0からtotalDurationまで（トラック1と同じサイズ）
+        const displayStartTime = 0;
+        const displayEndTime = totalDuration;
+
+        // フェードアウトは波形開始位置から波形終了位置まで
+        const fadeOutStartTime = waveformStartTime;
+        const fadeOutEndTime = waveformEndTime;
 
         WaveformDrawer.drawWaveform(
             audioBuffer,

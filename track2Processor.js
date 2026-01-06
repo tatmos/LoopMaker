@@ -4,61 +4,74 @@ class Track2Processor {
         this.audioContext = audioContext;
     }
 
-    // 再生用: フェードアウト+無音バッファ生成
-    createFadeOutBufferWithSilence(audioBuffer, loopStartTime, fadeOutDuration, totalDuration) {
-        const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(totalDuration * sampleRate);
-        const numChannels = audioBuffer.numberOfChannels;
-        const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-
-        const fadeOutStartSample = Math.floor(loopStartTime * sampleRate);
-        const fadeOutEndSample = Math.floor((loopStartTime + fadeOutDuration) * sampleRate);
-
-        for (let channel = 0; channel < numChannels; channel++) {
-            const inputData = audioBuffer.getChannelData(channel);
-            const outputData = buffer.getChannelData(channel);
-
-            for (let i = 0; i < frameCount; i++) {
-                // バッファの時間位置（0からtotalDurationまで）
-                const timeInBuffer = i / sampleRate;
+    // 再生用: フェードアウト+無音バッファ生成（オーバーラップ率分引いた位置から開始、フェードアウト、トラック1と同じサイズに）
+    createFadeOutBufferWithSilence(audioBuffer, overlapRate, targetDuration) {
+        if (overlapRate === 0) {
+            // オーバーラップ率が0の場合は元波形をそのまま返す（targetDurationに合わせて無音を追加）
+            const sampleRate = audioBuffer.sampleRate;
+            const frameCount = Math.floor(targetDuration * sampleRate);
+            const numChannels = audioBuffer.numberOfChannels;
+            const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
+            
+            for (let channel = 0; channel < numChannels; channel++) {
+                const inputData = audioBuffer.getChannelData(channel);
+                const outputData = buffer.getChannelData(channel);
                 
-                if (timeInBuffer < fadeOutDuration) {
-                    // フェードアウト区間（0からfadeOutDurationまで）
-                    const inputIndex = fadeOutStartSample + Math.floor(timeInBuffer * sampleRate);
-                    if (inputIndex < inputData.length && inputIndex < fadeOutEndSample) {
-                        const fadeOutProgress = timeInBuffer / fadeOutDuration;
-                        const fadeFactor = 1.0 - fadeOutProgress;
-                        outputData[i] = inputData[inputIndex] * fadeFactor;
+                for (let i = 0; i < frameCount; i++) {
+                    if (i < inputData.length) {
+                        outputData[i] = inputData[i];
                     } else {
                         outputData[i] = 0;
                     }
-                } else {
-                    // フェードアウト後は無音（fadeOutDurationからtotalDurationまで）
-                    outputData[i] = 0;
                 }
             }
+            
+            return buffer;
         }
-
-        return buffer;
+        
+        // createSaveBufferと同じ処理
+        return this.createSaveBuffer(audioBuffer, overlapRate, targetDuration);
     }
 
-    // 保存用: トラック2の保存バッファ生成
-    createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration) {
-        const loopStartTime = audioBuffer.duration * loopPosition;
-        const effectiveDuration = loopStartTime;
-        const fadeOutDuration = crossfadeDuration;
-        const fadeOutEndTime = loopStartTime + fadeOutDuration;
-
-        // 新しいバッファを作成（ループ位置までの長さ、フェードアウト後は無音）
+    // 保存用: トラック2の保存バッファ生成（オーバーラップ率分引いた位置から開始、フェードアウト、トラック1と同じサイズに）
+    createSaveBuffer(audioBuffer, overlapRate, targetDuration) {
+        // オーバーラップ率が0の場合は元波形をそのまま返す（targetDurationに合わせて無音を追加）
+        if (overlapRate === 0) {
+            const sampleRate = audioBuffer.sampleRate;
+            const frameCount = Math.floor(targetDuration * sampleRate);
+            const numChannels = audioBuffer.numberOfChannels;
+            const newBuffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
+            
+            for (let channel = 0; channel < numChannels; channel++) {
+                const inputData = audioBuffer.getChannelData(channel);
+                const outputData = newBuffer.getChannelData(channel);
+                
+                for (let i = 0; i < frameCount; i++) {
+                    if (i < inputData.length) {
+                        outputData[i] = inputData[i];
+                    } else {
+                        outputData[i] = 0;
+                    }
+                }
+            }
+            
+            return newBuffer;
+        }
+        
+        // オーバーラップ率からカットする長さを計算（50%で半分になる）
+        const cutDuration = audioBuffer.duration * (overlapRate / 100);
+        const waveformStartTime = audioBuffer.duration - cutDuration;
+        const waveformEndTime = audioBuffer.duration;
+        const waveformDuration = waveformEndTime - waveformStartTime;
+        
+        // トラック1と同じサイズのバッファを作成
         const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(effectiveDuration * sampleRate);
+        const frameCount = Math.floor(targetDuration * sampleRate);
         const numChannels = audioBuffer.numberOfChannels;
         const newBuffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
 
-        // フェードアウト区間のサンプル位置
-        const fadeOutStartSample = Math.floor(loopStartTime * sampleRate);
-        const fadeOutEndSample = Math.floor(fadeOutEndTime * sampleRate);
-        const fadeOutFrameCount = fadeOutEndSample - fadeOutStartSample;
+        const waveformStartSample = Math.floor(waveformStartTime * sampleRate);
+        const waveformEndSample = Math.floor(waveformEndTime * sampleRate);
 
         for (let channel = 0; channel < numChannels; channel++) {
             const inputData = audioBuffer.getChannelData(channel);
@@ -67,21 +80,19 @@ class Track2Processor {
             for (let i = 0; i < frameCount; i++) {
                 const timeInOutput = i / sampleRate;
                 
-                if (timeInOutput < loopStartTime) {
-                    // ループ位置より前は無音
-                    outputData[i] = 0;
-                } else if (timeInOutput < fadeOutEndTime) {
-                    // フェードアウト区間
-                    const inputIndex = Math.floor(timeInOutput * sampleRate);
-                    if (inputIndex < inputData.length) {
-                        const fadeOutProgress = (timeInOutput - loopStartTime) / fadeOutDuration;
+                if (timeInOutput < waveformDuration) {
+                    // 波形の範囲内：フェードアウトを適用
+                    const inputIndex = waveformStartSample + Math.floor(timeInOutput * sampleRate);
+                    if (inputIndex < inputData.length && inputIndex < waveformEndSample) {
+                        // フェードアウトを適用（1から0まで）
+                        const fadeOutProgress = timeInOutput / waveformDuration;
                         const fadeFactor = 1.0 - fadeOutProgress;
                         outputData[i] = inputData[inputIndex] * fadeFactor;
                     } else {
                         outputData[i] = 0;
                     }
                 } else {
-                    // フェードアウト後は無音
+                    // 波形エンド後は無音
                     outputData[i] = 0;
                 }
             }
