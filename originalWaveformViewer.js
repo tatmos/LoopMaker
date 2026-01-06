@@ -14,6 +14,24 @@ class OriginalWaveformViewer {
         this.setupEventListeners();
     }
 
+    lockScroll() {
+        if (typeof document !== 'undefined') {
+            document.body.style.overflow = 'hidden';
+            if (document.documentElement) {
+                document.documentElement.style.overflow = 'hidden';
+            }
+        }
+    }
+
+    unlockScroll() {
+        if (typeof document !== 'undefined') {
+            document.body.style.overflow = '';
+            if (document.documentElement) {
+                document.documentElement.style.overflow = '';
+            }
+        }
+    }
+
     setupEventListeners() {
         // マウス操作
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
@@ -88,6 +106,7 @@ class OriginalWaveformViewer {
             this.isDragging = true;
             this.dragType = 'start';
             this.canvas.style.cursor = 'ew-resize';
+            this.lockScroll();
             return;
         }
         
@@ -96,6 +115,7 @@ class OriginalWaveformViewer {
             this.isDragging = true;
             this.dragType = 'end';
             this.canvas.style.cursor = 'ew-resize';
+            this.lockScroll();
             return;
         }
         
@@ -105,6 +125,7 @@ class OriginalWaveformViewer {
             this.dragType = 'move';
             this.dragOffset = x - startX;
             this.canvas.style.cursor = 'move';
+            this.lockScroll();
             return;
         }
     }
@@ -159,6 +180,7 @@ class OriginalWaveformViewer {
             this.isDragging = false;
             this.dragType = null;
             this.canvas.style.cursor = 'default';
+            this.unlockScroll();
         }
     }
 

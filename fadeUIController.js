@@ -19,6 +19,24 @@ class FadeUIController {
         this.updateCanvasSize();
     }
 
+    lockScroll() {
+        if (typeof document !== 'undefined') {
+            document.body.style.overflow = 'hidden';
+            if (document.documentElement) {
+                document.documentElement.style.overflow = 'hidden';
+            }
+        }
+    }
+
+    unlockScroll() {
+        if (typeof document !== 'undefined') {
+            document.body.style.overflow = '';
+            if (document.documentElement) {
+                document.documentElement.style.overflow = '';
+            }
+        }
+    }
+
     setupEventListeners() {
         window.addEventListener('resize', () => {
             this.updateCanvasSize();
@@ -40,6 +58,7 @@ class FadeUIController {
                 // フェードコントローラとして動作（アンカーのみドラッグ可能）
                 this.setControlPoint(track, xNorm, yNorm);
                 this.dragging = track;
+                this.lockScroll();
                 if (e) {
                     e.stopPropagation();
                     e.preventDefault();
@@ -68,7 +87,10 @@ class FadeUIController {
         };
 
         const handlePointerUp = () => {
-            this.dragging = null;
+            if (this.dragging) {
+                this.dragging = null;
+                this.unlockScroll();
+            }
         };
 
         // マウス
