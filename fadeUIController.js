@@ -178,7 +178,8 @@ class FadeUIController {
         const dx = xPx - xMid;
         const dy = yPx - yMid;
         const distSq = dx * dx + dy * dy;
-        const radius = 10; // ピクセル
+        // タッチ環境でも掴みやすいように少し大きめの半径
+        const radius = 18; // ピクセル
         return distSq <= radius * radius;
     }
 

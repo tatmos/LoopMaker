@@ -80,7 +80,8 @@ class OriginalWaveformViewer {
         
         const startX = this.startTime * timeScale;
         const endX = this.endTime * timeScale;
-        const handleWidth = 8;
+        // タッチデバイスでも掴みやすいよう少し広めにする
+        const handleWidth = 16;
         
         // 開始位置のハンドルをクリックしたか
         if (Math.abs(x - startX) < handleWidth) {
@@ -141,7 +142,7 @@ class OriginalWaveformViewer {
             // ハンドルの上にマウスがあるかチェック
             const startX = this.startTime * timeScale;
             const endX = this.endTime * timeScale;
-            const handleWidth = 8;
+            const handleWidth = 16;
             
             if (Math.abs(x - startX) < handleWidth || Math.abs(x - endX) < handleWidth) {
                 this.canvas.style.cursor = 'ew-resize';
