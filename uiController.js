@@ -16,6 +16,8 @@ class UIController {
         this.muteTrack2Btn = document.getElementById('mute-track2');
         this.dropZone = document.getElementById('original-drop-zone');
         this.dropOverlay = document.getElementById('drop-overlay');
+        this.waveformTrack1 = document.getElementById('waveform-track1');
+        this.waveformTrack2 = document.getElementById('waveform-track2');
         
         // ミュート状態
         this.track1Muted = false;
@@ -55,6 +57,29 @@ class UIController {
                     this.loadFile(files[0]);
                 }
             });
+        }
+
+        const clickHandler = (e) => {
+            if (!this.loopMaker || !this.loopMaker.track1Buffer) return;
+            if (!this.loopMaker.audioPlayer || !this.loopMaker.audioPlayer.isPlaying) return;
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const width = rect.width;
+            if (width <= 0) return;
+
+            const ratio = Math.min(1, Math.max(0, x / width));
+            const duration = this.loopMaker.track1Buffer.duration;
+            const targetTime = duration * ratio;
+
+            this.loopMaker.seekTo(targetTime);
+        };
+
+        if (this.waveformTrack1) {
+            this.waveformTrack1.addEventListener('click', clickHandler);
+        }
+        if (this.waveformTrack2) {
+            this.waveformTrack2.addEventListener('click', clickHandler);
         }
         
         // キーボードショートカット

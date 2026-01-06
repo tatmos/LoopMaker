@@ -61,7 +61,8 @@ class Track1Processor {
     }
 
     // 保存用: トラック1の保存バッファ生成（オーバーラップ率の分後半をカットし、フェードイン適用）
-    createSaveBuffer(audioBuffer, overlapRate) {
+    // fadeSettings: { mode: 'linear'|'log'|'exp'|'custom', controlX:number, controlY:number }
+    createSaveBuffer(audioBuffer, overlapRate, fadeSettings = null) {
         // オーバーラップ率が0の場合は何も処理しない
         if (overlapRate === 0) {
             return audioBuffer;
@@ -99,7 +100,10 @@ class Track1Processor {
                     let fadeFactor = 1.0;
                     // フェードインを適用（0からオーバーラップ率の長さ分だけ）
                     if (i < fadeInFrameCount) {
-                        fadeFactor = i / fadeInFrameCount;
+                        const t = i / fadeInFrameCount;
+                        const mode = fadeSettings && fadeSettings.mode ? fadeSettings.mode : 'log';
+                        const cp = fadeSettings ? { controlX: fadeSettings.controlX, controlY: fadeSettings.controlY } : null;
+                        fadeFactor = FadeCurves.evaluate(mode, t, cp);
                     }
                     outputData[i] = inputData[inputIndex] * fadeFactor;
                 } else {

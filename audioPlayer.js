@@ -15,12 +15,19 @@ class AudioPlayer {
     }
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
-    playPreviewWithBuffers(track1Buffer, track2Buffer) {
+    // offsetSeconds: 再生開始位置（秒）
+    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0) {
         if (!track1Buffer || !track2Buffer || this.isPlaying) return false;
 
         try {
             // トラック1の加工後のバッファの長さをループ期間として使用
             const loopDuration = track1Buffer.duration;
+
+            // オフセットをループ長の範囲に収める
+            let offset = offsetSeconds % loopDuration;
+            if (offset < 0) {
+                offset += loopDuration;
+            }
             
             // トラック1: 加工後のバッファをループ再生（トラック1の加工後の範囲でループ）
             const source1 = this.audioContext.createBufferSource();
@@ -57,12 +64,13 @@ class AudioPlayer {
             this.sourceNodes = [source1, source2, this.gainNode1, this.gainNode2, this.analyser1, this.analyser2];
             this.loopDuration = loopDuration;
 
-            // 2トラックを同時に再生（トラック1の加工後の範囲でループ）
-            const startOffset = this.audioContext.currentTime;
-            source1.start(startOffset);
-            source2.start(startOffset);
+            // 2トラックを同時に再生（オフセット位置から）
+            const startAt = this.audioContext.currentTime;
+            source1.start(startAt, offset);
+            source2.start(startAt, offset);
 
-            this.startTime = startOffset;
+            // 再生位置計算用の基準時刻（ループ位置 = currentTime - startTime）
+            this.startTime = startAt - offset;
             this.isPlaying = true;
             return true;
         } catch (error) {

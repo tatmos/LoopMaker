@@ -1,0 +1,163 @@
+// フェードカーブUIコントローラ（波形上にオーバーレイ表示）
+class FadeUIController {
+    /**
+     * @param {LoopMaker} loopMaker
+     * @param {HTMLCanvasElement} canvas1 - トラック1用フェードUIキャンバス
+     * @param {HTMLCanvasElement} canvas2 - トラック2用フェードUIキャンバス
+     */
+    constructor(loopMaker, canvas1, canvas2) {
+        this.loopMaker = loopMaker;
+        this.canvas1 = canvas1;
+        this.canvas2 = canvas2;
+        this.ctx1 = canvas1.getContext('2d');
+        this.ctx2 = canvas2.getContext('2d');
+
+        // ドラッグ状態
+        this.dragging = null; // 'track1' | 'track2' | null
+
+        this.setupEventListeners();
+        this.updateCanvasSize();
+    }
+
+    setupEventListeners() {
+        window.addEventListener('resize', () => {
+            this.updateCanvasSize();
+            this.render();
+        });
+
+        const handleMouseDown = (track, e) => {
+            const canvas = track === 'track1' ? this.canvas1 : this.canvas2;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+
+            this.setControlPoint(track, x, y);
+            this.dragging = track;
+        };
+
+        const handleMouseMove = (e) => {
+            if (!this.dragging) return;
+            const canvas = this.dragging === 'track1' ? this.canvas1 : this.canvas2;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+
+            this.setControlPoint(this.dragging, x, y);
+        };
+
+        const handleMouseUp = () => {
+            this.dragging = null;
+        };
+
+        this.canvas1.addEventListener('mousedown', (e) => handleMouseDown('track1', e));
+        this.canvas2.addEventListener('mousedown', (e) => handleMouseDown('track2', e));
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    updateCanvasSize() {
+        [this.canvas1, this.canvas2].forEach((canvas) => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        });
+    }
+
+    /**
+     * コントロールポイント設定（0〜1正規化座標）
+     */
+    setControlPoint(track, nx, ny) {
+        // キャンバス座標（左上0,0）→ フェード値（x 0〜1, y 0〜1 上が1）
+        const clampedX = Math.min(0.9, Math.max(0.1, nx));
+        const clampedY = Math.min(0.9, Math.max(0.1, ny));
+        const valueY = 1 - clampedY;
+
+        if (track === 'track1') {
+            this.loopMaker.fadeSettingsTrack1.controlX = clampedX;
+            this.loopMaker.fadeSettingsTrack1.controlY = valueY;
+            // アンカーを動かしたらカスタムカーブとして扱う
+            this.loopMaker.fadeSettingsTrack1.mode = 'custom';
+        } else {
+            this.loopMaker.fadeSettingsTrack2.controlX = clampedX;
+            this.loopMaker.fadeSettingsTrack2.controlY = valueY;
+            // アンカーを動かしたらカスタムカーブとして扱う
+            this.loopMaker.fadeSettingsTrack2.mode = 'custom';
+        }
+
+        // バッファを再生成して再描画
+        this.loopMaker.updateBuffers();
+        this.loopMaker.drawWaveforms();
+        this.render();
+    }
+
+    render() {
+        this.drawTrackFade(this.ctx1, this.canvas1, 'track1', true);
+        this.drawTrackFade(this.ctx2, this.canvas2, 'track2', false);
+    }
+
+    drawTrackFade(ctx, canvas, track, isFadeIn) {
+        const width = canvas.width = canvas.offsetWidth;
+        const height = canvas.height = canvas.offsetHeight;
+        ctx.clearRect(0, 0, width, height);
+
+        const settings = track === 'track1'
+            ? this.loopMaker.fadeSettingsTrack1
+            : this.loopMaker.fadeSettingsTrack2;
+
+        if (!settings) return;
+
+        // フェードUIの表示幅をフェード範囲のみに限定
+        // オーバーラップ率 r(0〜50) のとき、フェード時間は元長の r% 、
+        // トラック長は (100 - r)% → フェード長/トラック長 = r / (100 - r)
+        const r = this.loopMaker.overlapRate || 0;
+        if (r <= 0) return;
+        const fadeWidthRatio = r / (100 - r);
+        const fadeWidth = width * Math.min(1, Math.max(0, fadeWidthRatio));
+        if (fadeWidth <= 0) return;
+
+        const mode = settings.mode;
+        const cp = { controlX: settings.controlX, controlY: settings.controlY };
+
+        // カーブ描画
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = track === 'track1' ? 'rgba(102, 126, 234, 0.9)' : 'rgba(118, 75, 162, 0.9)';
+        ctx.beginPath();
+        const steps = 64;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            let v = FadeCurves.evaluate(mode, t, cp);
+            if (!isFadeIn) {
+                v = 1 - v; // フェードアウトは逆カーブ
+            }
+            const x = t * fadeWidth;
+            const y = (1 - v) * height;
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+
+        // コントロールポイントを描画（カーブ上の t=0.5 相当位置）
+        const tMid = 0.5;
+        let vMid = FadeCurves.evaluate(mode, tMid, cp);
+        if (!isFadeIn) {
+            vMid = 1 - vMid;
+        }
+        const xMid = tMid * fadeWidth;
+        const yMid = (1 - vMid) * height;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(xMid, yMid, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+}
+
+

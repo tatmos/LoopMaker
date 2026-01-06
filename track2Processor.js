@@ -5,7 +5,7 @@ class Track2Processor {
     }
 
     // 再生用: フェードアウト+無音バッファ生成（オーバーラップ率分引いた位置から開始、フェードアウト、トラック1と同じサイズに）
-    createFadeOutBufferWithSilence(audioBuffer, overlapRate, targetDuration) {
+    createFadeOutBufferWithSilence(audioBuffer, overlapRate, targetDuration, fadeSettings = null) {
         if (overlapRate === 0) {
             // オーバーラップ率が0の場合は元波形をそのまま返す（targetDurationに合わせて無音を追加）
             const sampleRate = audioBuffer.sampleRate;
@@ -30,11 +30,12 @@ class Track2Processor {
         }
         
         // createSaveBufferと同じ処理
-        return this.createSaveBuffer(audioBuffer, overlapRate, targetDuration);
+        return this.createSaveBuffer(audioBuffer, overlapRate, targetDuration, fadeSettings);
     }
 
     // 保存用: トラック2の保存バッファ生成（オーバーラップ率分引いた位置から開始、フェードアウト、トラック1と同じサイズに）
-    createSaveBuffer(audioBuffer, overlapRate, targetDuration) {
+    // fadeSettings: { mode: 'linear'|'log'|'exp'|'custom', controlX:number, controlY:number }
+    createSaveBuffer(audioBuffer, overlapRate, targetDuration, fadeSettings = null) {
         // オーバーラップ率が0の場合は元波形をそのまま返す（targetDurationに合わせて無音を追加）
         if (overlapRate === 0) {
             const sampleRate = audioBuffer.sampleRate;
@@ -86,7 +87,10 @@ class Track2Processor {
                     if (inputIndex < inputData.length && inputIndex < waveformEndSample) {
                         // フェードアウトを適用（1から0まで）
                         const fadeOutProgress = timeInOutput / waveformDuration;
-                        const fadeFactor = 1.0 - fadeOutProgress;
+                        const mode = fadeSettings && fadeSettings.mode ? fadeSettings.mode : 'log';
+                        const cp = fadeSettings ? { controlX: fadeSettings.controlX, controlY: fadeSettings.controlY } : null;
+                        const fadeCurve = FadeCurves.evaluate(mode, fadeOutProgress, cp);
+                        const fadeFactor = 1.0 - fadeCurve;
                         outputData[i] = inputData[inputIndex] * fadeFactor;
                     } else {
                         outputData[i] = 0;

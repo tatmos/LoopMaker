@@ -14,6 +14,17 @@ class LoopMaker {
         this.animationFrameId = null;
         this.useRangeStart = 0; // 利用範囲の開始位置
         this.useRangeEnd = 0; // 利用範囲の終了位置
+        // フェードカーブ設定（デフォルトはログフェード）
+        this.fadeSettingsTrack1 = {
+            mode: 'log',
+            controlX: 0.25,
+            controlY: 0.1
+        };
+        this.fadeSettingsTrack2 = {
+            mode: 'log',
+            controlX: 0.25,
+            controlY: 0.1
+        };
         
         this.initializeElements();
         this.uiController = new UIController(this);
@@ -25,6 +36,8 @@ class LoopMaker {
         const originalRuler = document.getElementById('ruler-original');
         const canvas1 = document.getElementById('waveform-track1');
         const canvas2 = document.getElementById('waveform-track2');
+        const fadeCanvas1 = document.getElementById('fade-ui-track1');
+        const fadeCanvas2 = document.getElementById('fade-ui-track2');
         const ruler1 = document.getElementById('ruler-track1');
         const ruler2 = document.getElementById('ruler-track2');
         this.levelMeter1 = document.getElementById('level-meter-track1');
@@ -39,6 +52,7 @@ class LoopMaker {
         };
         
         this.waveformRenderer = new WaveformRenderer(canvas1, canvas2, ruler1, ruler2);
+        this.fadeUIController = new FadeUIController(this, fadeCanvas1, fadeCanvas2);
     }
 
     updateBuffers() {
@@ -54,24 +68,46 @@ class LoopMaker {
         // トラック1の加工後のバッファを生成
         this.track1Buffer = this.audioProcessor.track1Processor.createSaveBuffer(
             useRangeBuffer, 
-            this.overlapRate
+            this.overlapRate,
+            this.fadeSettingsTrack1
         );
         
         // トラック2の加工後のバッファを生成（トラック1と同じサイズにする）
         this.track2Buffer = this.audioProcessor.track2Processor.createSaveBuffer(
             useRangeBuffer, 
             this.overlapRate,
-            this.track1Buffer.duration
+            this.track1Buffer.duration,
+            this.fadeSettingsTrack2
         );
         
         // トラック1と2をミックスしたバッファを生成
         this.mixedBuffer = this.audioProcessor.mixBuffers(this.track1Buffer, this.track2Buffer);
     }
 
+    // 波形上クリックによるシーク
+    seekTo(timeInSeconds) {
+        if (!this.audioPlayer || !this.track1Buffer || !this.track2Buffer) return;
+
+        const duration = this.track1Buffer.duration;
+        if (duration <= 0) return;
+
+        // ループ範囲内にクリップ
+        let targetTime = Math.max(0, Math.min(duration, timeInSeconds));
+
+        // 再生中のみシーク（要望に合わせて）
+        if (this.audioPlayer.isPlaying) {
+            this.audioPlayer.stopPreview();
+            this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, targetTime);
+        }
+    }
+
     drawWaveforms() {
         if (!this.track1Buffer || !this.track2Buffer || !this.waveformRenderer) return;
         const currentTime = this.audioPlayer ? this.audioPlayer.getCurrentPlaybackTime() : null;
         this.waveformRenderer.render(this.track1Buffer, this.track2Buffer, currentTime);
+        if (this.fadeUIController) {
+            this.fadeUIController.render();
+        }
     }
 
     startPlaybackAnimation() {
