@@ -58,6 +58,17 @@ class LoopMaker {
     updateBuffers() {
         if (!this.originalBuffer || !this.audioProcessor) return;
         
+        // 再生中の場合、現在の再生位置を保持
+        const wasPlaying = this.audioPlayer && this.audioPlayer.isPlaying;
+        let currentPlaybackTime = null;
+        if (wasPlaying) {
+            currentPlaybackTime = this.audioPlayer.getCurrentPlaybackTime();
+            if (currentPlaybackTime !== null) {
+                // 新しいバッファの長さに合わせてクリップ
+                const oldDuration = this.track1Buffer ? this.track1Buffer.duration : 0;
+            }
+        }
+        
         // 元波形から利用範囲を抽出
         const useRangeBuffer = this.audioProcessor.extractRange(
             this.originalBuffer,
@@ -82,6 +93,18 @@ class LoopMaker {
         
         // トラック1と2をミックスしたバッファを生成
         this.mixedBuffer = this.audioProcessor.mixBuffers(this.track1Buffer, this.track2Buffer);
+        
+        // 再生中だった場合、新しいバッファで再生を再開
+        if (wasPlaying && this.audioPlayer && this.track1Buffer && this.track2Buffer) {
+            const newDuration = this.track1Buffer.duration;
+            if (newDuration > 0) {
+                // 新しいバッファの長さに合わせて再生位置をクリップ
+                let seekTime = currentPlaybackTime !== null ? currentPlaybackTime : 0;
+                seekTime = Math.max(0, Math.min(newDuration, seekTime));
+                this.audioPlayer.stopPreview();
+                this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, seekTime);
+            }
+        }
     }
 
     // 波形上クリックによるシーク
