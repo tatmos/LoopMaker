@@ -101,8 +101,10 @@ class UIController {
         
         // キーボードショートカット
         document.addEventListener('keydown', (e) => {
-            // 入力欄にフォーカスがある場合は無視
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+            const isOverlapSlider = e.target.id === 'overlap-rate';
+            // 入力欄にフォーカスがある場合は無視するが、オーバーラップ率スライダーだけは許可
+            if (isInput && !isOverlapSlider) {
                 return;
             }
             
@@ -130,6 +132,14 @@ class UIController {
         this.showStatus('ファイルを読み込み中...', 'info');
 
         try {
+            // 再生中なら停止してから読み込み
+            if (this.loopMaker.audioPlayer && this.loopMaker.audioPlayer.isPlaying) {
+                this.loopMaker.audioPlayer.stopPreview();
+                this.loopMaker.stopPlaybackAnimation();
+                this.playBtn.disabled = false;
+                this.stopBtn.disabled = true;
+            }
+
             // ファイル名を保存用ファイル名に反映
             if (this.filenameInput && file && file.name) {
                 const originalName = file.name;
