@@ -9,25 +9,22 @@ class WaveformRenderer {
         this.ruler2 = ruler2;
     }
 
-    render(audioBuffer, overlapRate, currentPlaybackTime = null) {
-        if (!audioBuffer) return;
+    render(track1Buffer, track2Buffer, currentPlaybackTime = null) {
+        if (!track1Buffer || !track2Buffer) return;
 
         const width = this.canvas1.width = this.canvas1.offsetWidth;
         const height = this.canvas1.height = this.canvas1.offsetHeight;
         this.canvas2.width = width;
         this.canvas2.height = height;
 
-        // オーバーラップ率からカットする長さを計算
-        const cutDuration = audioBuffer.duration * (overlapRate / 100);
-        const track1Duration = audioBuffer.duration - cutDuration;
-        const track2StartTime = audioBuffer.duration - cutDuration;
+        // トラック1の加工後のバッファの長さを取得
+        const track1Duration = track1Buffer.duration;
 
-        // トラック1: 0からオーバーラップ率の範囲を引いた位置まで表示（フェードイン）
-        this.drawTrack1(audioBuffer, 0, track1Duration, track1Duration, width, height);
+        // トラック1: 加工後のバッファを表示
+        this.drawTrack1(track1Buffer, track1Duration, width, height);
         
-        // トラック2: オーバーラップ率分引いた位置から波形最後まで（フェードアウト）
-        const track2Duration = audioBuffer.duration - track2StartTime;
-        this.drawTrack2(audioBuffer, track2StartTime, track2Duration, track1Duration, width, height);
+        // トラック2: 加工後のバッファを表示
+        this.drawTrack2(track2Buffer, track1Duration, width, height);
         
         // 再生位置ラインを描画
         if (currentPlaybackTime !== null) {
@@ -63,18 +60,20 @@ class WaveformRenderer {
         ctx2.stroke();
     }
 
-    drawTrack1(audioBuffer, waveformStartTime, waveformDuration, totalDuration, width, height) {
+    drawTrack1(track1Buffer, totalDuration, width, height) {
         const ctx = this.ctx1;
         ctx.clearRect(0, 0, width, height);
         
-        if (!audioBuffer || totalDuration <= 0) return;
+        if (!track1Buffer || totalDuration <= 0) return;
 
-        const waveformEndTime = waveformStartTime + waveformDuration;
+        // トラック1の加工後のバッファ全体を表示
+        const waveformStartTime = 0;
+        const waveformEndTime = track1Buffer.duration;
         const displayStartTime = 0;
         const displayEndTime = totalDuration;
 
         WaveformDrawer.drawWaveform(
-            audioBuffer,
+            track1Buffer,
             ctx,
             waveformStartTime,
             waveformEndTime,
@@ -83,32 +82,30 @@ class WaveformRenderer {
             width,
             height,
             {
-                // フェードインを適用（0から1まで）
-                fadeInStartTime: waveformStartTime,
-                fadeInEndTime: waveformEndTime,
+                // フェードインなし（既に加工済み）
+                fadeInStartTime: null,
+                fadeInEndTime: null,
                 drawDCOffset: true,
                 backgroundColor: '#e0e0e0'
             }
         );
     }
 
-    drawTrack2(audioBuffer, waveformStartTime, waveformDuration, totalDuration, width, height) {
+    drawTrack2(track2Buffer, totalDuration, width, height) {
         const ctx = this.ctx2;
         ctx.clearRect(0, 0, width, height);
         
-        if (!audioBuffer || totalDuration <= 0) return;
+        if (!track2Buffer || totalDuration <= 0) return;
 
-        const waveformEndTime = waveformStartTime + waveformDuration;
+        // トラック2の加工後のバッファ全体を表示
+        const waveformStartTime = 0;
+        const waveformEndTime = track2Buffer.duration;
         // 表示範囲は0からtotalDurationまで（トラック1と同じサイズ）
         const displayStartTime = 0;
         const displayEndTime = totalDuration;
 
-        // フェードアウトは波形開始位置から波形終了位置まで
-        const fadeOutStartTime = waveformStartTime;
-        const fadeOutEndTime = waveformEndTime;
-
         WaveformDrawer.drawWaveform(
-            audioBuffer,
+            track2Buffer,
             ctx,
             waveformStartTime,
             waveformEndTime,
@@ -117,8 +114,9 @@ class WaveformRenderer {
             width,
             height,
             {
-                fadeOutStartTime: fadeOutStartTime,
-                fadeOutEndTime: fadeOutEndTime,
+                // フェードアウトなし（既に加工済み）
+                fadeOutStartTime: null,
+                fadeOutEndTime: null,
                 drawDCOffset: true,
                 backgroundColor: '#e0e0e0'
             }

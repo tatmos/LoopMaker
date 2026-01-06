@@ -27,6 +27,10 @@ class Track1Processor {
 
         const waveformStartSample = Math.floor(waveformStartTime * sampleRate);
         const waveformEndSample = Math.floor(waveformEndTime * sampleRate);
+        
+        // フェードインの長さはオーバーラップ率の長さ
+        const fadeInDuration = cutDuration;
+        const fadeInFrameCount = Math.floor(fadeInDuration * sampleRate);
 
         for (let channel = 0; channel < numChannels; channel++) {
             const inputData = audioBuffer.getChannelData(channel);
@@ -35,9 +39,12 @@ class Track1Processor {
             for (let i = 0; i < frameCount; i++) {
                 const inputIndex = waveformStartSample + i;
                 if (inputIndex < inputData.length && inputIndex < waveformEndSample) {
-                    // フェードインを適用（0から1まで）
-                    const fadeInProgress = i / frameCount;
-                    outputData[i] = inputData[inputIndex] * fadeInProgress;
+                    let fadeFactor = 1.0;
+                    // フェードインを適用（0からオーバーラップ率の長さ分だけ）
+                    if (i < fadeInFrameCount) {
+                        fadeFactor = i / fadeInFrameCount;
+                    }
+                    outputData[i] = inputData[inputIndex] * fadeFactor;
                 } else {
                     outputData[i] = 0;
                 }
@@ -78,6 +85,10 @@ class Track1Processor {
         const waveformStartSample = Math.floor(waveformStartTime * sampleRate);
         const waveformEndSample = Math.floor(waveformEndTime * sampleRate);
 
+        // フェードインの長さはオーバーラップ率の長さ
+        const fadeInDuration = cutDuration;
+        const fadeInFrameCount = Math.floor(fadeInDuration * sampleRate);
+
         for (let channel = 0; channel < numChannels; channel++) {
             const inputData = audioBuffer.getChannelData(channel);
             const outputData = newBuffer.getChannelData(channel);
@@ -85,9 +96,12 @@ class Track1Processor {
             for (let i = 0; i < frameCount; i++) {
                 const inputIndex = waveformStartSample + i;
                 if (inputIndex < inputData.length && inputIndex < waveformEndSample) {
-                    // フェードインを適用（0から1まで）
-                    const fadeInProgress = i / frameCount;
-                    outputData[i] = inputData[inputIndex] * fadeInProgress;
+                    let fadeFactor = 1.0;
+                    // フェードインを適用（0からオーバーラップ率の長さ分だけ）
+                    if (i < fadeInFrameCount) {
+                        fadeFactor = i / fadeInFrameCount;
+                    }
+                    outputData[i] = inputData[inputIndex] * fadeFactor;
                 } else {
                     outputData[i] = 0;
                 }
