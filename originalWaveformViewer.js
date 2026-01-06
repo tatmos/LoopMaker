@@ -44,15 +44,23 @@ class OriginalWaveformViewer {
             if (!this.audioBuffer) return;
             const touch = e.touches[0];
             if (!touch) return;
-            e.preventDefault();
+            // ドラッグ開始時のみ preventDefault（判定は handleMouseDown 内で行う）
+            const wasDragging = this.isDragging;
             this.handleMouseDown(touch);
+            // ドラッグが開始された場合のみ preventDefault
+            if (this.isDragging && !wasDragging) {
+                e.preventDefault();
+            }
         }, { passive: false });
 
         this.canvas.addEventListener('touchmove', (e) => {
             if (!this.audioBuffer) return;
             const touch = e.touches[0];
             if (!touch) return;
-            e.preventDefault();
+            // ドラッグ中のみ preventDefault
+            if (this.isDragging) {
+                e.preventDefault();
+            }
             this.handleMouseMove(touch);
         }, { passive: false });
 
@@ -63,6 +71,11 @@ class OriginalWaveformViewer {
             } else {
                 this.handleMouseUp(e);
             }
+        });
+
+        this.canvas.addEventListener('touchcancel', (e) => {
+            // タッチがキャンセルされた場合も確実に解除
+            this.handleMouseUp(e);
         });
     }
 

@@ -103,14 +103,21 @@ class FadeUIController {
         const onTouchStart = (track, e) => {
             const touch = e.touches[0];
             if (!touch) return;
-            e.preventDefault();
+            const wasDragging = this.dragging !== null;
             handlePointerDown(track, touch.clientX, touch.clientY, e);
+            // ドラッグが開始された場合のみ preventDefault
+            if (this.dragging !== null && !wasDragging) {
+                e.preventDefault();
+            }
         };
 
         const onTouchMove = (e) => {
             const touch = e.touches[0];
             if (!touch) return;
-            e.preventDefault();
+            // ドラッグ中のみ preventDefault
+            if (this.dragging !== null) {
+                e.preventDefault();
+            }
             handlePointerMove(touch.clientX, touch.clientY);
         };
 
@@ -118,10 +125,16 @@ class FadeUIController {
             handlePointerUp();
         };
 
+        const onTouchCancel = () => {
+            // タッチがキャンセルされた場合も確実に解除
+            handlePointerUp();
+        };
+
         this.canvas1.addEventListener('touchstart', (e) => onTouchStart('track1', e), { passive: false });
         this.canvas2.addEventListener('touchstart', (e) => onTouchStart('track2', e), { passive: false });
         window.addEventListener('touchmove', onTouchMove, { passive: false });
         window.addEventListener('touchend', onTouchEnd);
+        window.addEventListener('touchcancel', onTouchCancel);
     }
 
     updateCanvasSize() {
