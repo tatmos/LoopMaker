@@ -15,10 +15,37 @@ class OriginalWaveformViewer {
     }
 
     setupEventListeners() {
+        // マウス操作
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         this.canvas.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+
+        // iOS / タッチ操作対応
+        this.canvas.addEventListener('touchstart', (e) => {
+            if (!this.audioBuffer) return;
+            const touch = e.touches[0];
+            if (!touch) return;
+            e.preventDefault();
+            this.handleMouseDown(touch);
+        }, { passive: false });
+
+        this.canvas.addEventListener('touchmove', (e) => {
+            if (!this.audioBuffer) return;
+            const touch = e.touches[0];
+            if (!touch) return;
+            e.preventDefault();
+            this.handleMouseMove(touch);
+        }, { passive: false });
+
+        this.canvas.addEventListener('touchend', (e) => {
+            const touch = e.changedTouches[0] || e.touches[0];
+            if (touch) {
+                this.handleMouseUp(touch);
+            } else {
+                this.handleMouseUp(e);
+            }
+        });
     }
 
     setAudioBuffer(audioBuffer) {

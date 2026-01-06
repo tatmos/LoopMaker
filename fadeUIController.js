@@ -25,11 +25,11 @@ class FadeUIController {
             this.render();
         });
 
-        const handleMouseDown = (track, e) => {
+        const handlePointerDown = (track, clientX, clientY, e) => {
             const canvas = track === 'track1' ? this.canvas1 : this.canvas2;
             const rect = canvas.getBoundingClientRect();
-            const xPx = e.clientX - rect.left;
-            const yPx = e.clientY - rect.top;
+            const xPx = clientX - rect.left;
+            const yPx = clientY - rect.top;
             const xNorm = xPx / rect.width;
             const yNorm = yPx / rect.height;
 
@@ -40,8 +40,10 @@ class FadeUIController {
                 // フェードコントローラとして動作（アンカーのみドラッグ可能）
                 this.setControlPoint(track, xNorm, yNorm);
                 this.dragging = track;
-                e.stopPropagation();
-                e.preventDefault();
+                if (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
             } else {
                 // アンカー以外は波形クリックとして扱い、再生位置移動
                 if (this.loopMaker && this.loopMaker.track1Buffer && this.loopMaker.audioPlayer && this.loopMaker.audioPlayer.isPlaying) {
@@ -55,24 +57,49 @@ class FadeUIController {
             }
         };
 
-        const handleMouseMove = (e) => {
+        const handlePointerMove = (clientX, clientY) => {
             if (!this.dragging) return;
             const canvas = this.dragging === 'track1' ? this.canvas1 : this.canvas2;
             const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / rect.width;
-            const y = (e.clientY - rect.top) / rect.height;
+            const x = (clientX - rect.left) / rect.width;
+            const y = (clientY - rect.top) / rect.height;
 
             this.setControlPoint(this.dragging, x, y);
         };
 
-        const handleMouseUp = () => {
+        const handlePointerUp = () => {
             this.dragging = null;
         };
 
-        this.canvas1.addEventListener('mousedown', (e) => handleMouseDown('track1', e));
-        this.canvas2.addEventListener('mousedown', (e) => handleMouseDown('track2', e));
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
+        // マウス
+        this.canvas1.addEventListener('mousedown', (e) => handlePointerDown('track1', e.clientX, e.clientY, e));
+        this.canvas2.addEventListener('mousedown', (e) => handlePointerDown('track2', e.clientX, e.clientY, e));
+        window.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
+        window.addEventListener('mouseup', handlePointerUp);
+
+        // タッチ（iOS対応）
+        const onTouchStart = (track, e) => {
+            const touch = e.touches[0];
+            if (!touch) return;
+            e.preventDefault();
+            handlePointerDown(track, touch.clientX, touch.clientY, e);
+        };
+
+        const onTouchMove = (e) => {
+            const touch = e.touches[0];
+            if (!touch) return;
+            e.preventDefault();
+            handlePointerMove(touch.clientX, touch.clientY);
+        };
+
+        const onTouchEnd = () => {
+            handlePointerUp();
+        };
+
+        this.canvas1.addEventListener('touchstart', (e) => onTouchStart('track1', e), { passive: false });
+        this.canvas2.addEventListener('touchstart', (e) => onTouchStart('track2', e), { passive: false });
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        window.addEventListener('touchend', onTouchEnd);
     }
 
     updateCanvasSize() {
