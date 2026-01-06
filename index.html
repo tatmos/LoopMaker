@@ -16,7 +16,8 @@
         <div class="controls-panel">
             <div class="file-controls">
                 <label for="file-input" class="btn btn-primary">
-                    <input type="file" id="file-input" accept="audio/*" hidden>
+                    <!-- iOS系ブラウザでwav/mp3がグレーアウトしないように拡張子も明示 -->
+                    <input type="file" id="file-input" accept=".wav,.mp3,audio/*" hidden>
                     波形をアップロード
                 </label>
                 <button id="save-btn" class="btn btn-secondary" disabled>ファイル保存</button>
