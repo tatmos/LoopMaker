@@ -14,6 +14,8 @@ class UIController {
         this.status = document.getElementById('status');
         this.muteTrack1Btn = document.getElementById('mute-track1');
         this.muteTrack2Btn = document.getElementById('mute-track2');
+        this.dropZone = document.getElementById('original-drop-zone');
+        this.dropOverlay = document.getElementById('drop-overlay');
         
         // ミュート状態
         this.track1Muted = false;
@@ -27,6 +29,33 @@ class UIController {
         this.stopBtn.addEventListener('click', () => this.stopPreview());
         this.muteTrack1Btn.addEventListener('click', () => this.toggleMuteTrack1());
         this.muteTrack2Btn.addEventListener('click', () => this.toggleMuteTrack2());
+
+        if (this.dropZone) {
+            ['dragenter', 'dragover'].forEach(evt => {
+                this.dropZone.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.dropZone.classList.add('dragover');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(evt => {
+                this.dropZone.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.dropZone.classList.remove('dragover');
+                });
+            });
+
+            this.dropZone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    // 同じファイルを再度読み込めるようにリセット
+                    this.fileInput.value = '';
+                    this.loadFile(files[0]);
+                }
+            });
+        }
         
         // キーボードショートカット
         document.addEventListener('keydown', (e) => {
@@ -50,6 +79,12 @@ class UIController {
         const file = event.target.files[0];
         if (!file) return;
 
+        await this.loadFile(file);
+    }
+
+    async loadFile(file) {
+        if (!file) return;
+
         this.showStatus('ファイルを読み込み中...', 'info');
 
         try {
@@ -58,6 +93,17 @@ class UIController {
             this.loopMaker.originalBuffer = await this.loopMaker.audioContext.decodeAudioData(arrayBuffer);
             this.loopMaker.audioProcessor = new AudioProcessor(this.loopMaker.audioContext);
             this.loopMaker.audioPlayer = new AudioPlayer(this.loopMaker.audioContext);
+            
+            // 元波形を表示
+            if (this.loopMaker.originalWaveformViewer) {
+                this.loopMaker.originalWaveformViewer.setAudioBuffer(this.loopMaker.originalBuffer);
+                this.loopMaker.useRangeStart = 0;
+                this.loopMaker.useRangeEnd = this.loopMaker.originalBuffer.duration;
+                this.loopMaker.originalWaveformViewer.setRange(this.loopMaker.useRangeStart, this.loopMaker.useRangeEnd);
+                if (this.dropOverlay) {
+                    this.dropOverlay.classList.add('hidden');
+                }
+            }
             
             // 初期オーバーラップ率を0に設定
             if (this.loopMaker.overlapRateController) {

@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>LoopMaker</h1>
-            <p class="subtitle">誰でも簡単に使えるループ波形エディタ by <a href="https://twitter.com/tatmos">tatmos</a></p>
+            <p class="subtitle">誰でも簡単に使えるループ波形エディタ by <a href="https://github.com/sponsors/tatmos">tatmos</a></p>
         </header>
 
         <div class="controls-panel">
@@ -29,6 +29,17 @@
         </div>
 
         <div class="waveform-container">
+            <div class="original-waveform-container">
+                <div class="track-header">
+                    <div class="track-label">元波形（利用範囲指定）</div>
+                </div>
+                <div class="waveform-wrapper drop-zone" id="original-drop-zone">
+                    <div class="drop-overlay" id="drop-overlay">波形をアップロード</div>
+                    <canvas id="original-waveform" class="waveform-canvas"></canvas>
+                </div>
+                <div id="ruler-original" class="time-ruler"></div>
+            </div>
+            
             <div class="track-container">
                 <div class="track-sidebar">
                     <div id="level-meter-track1" class="level-meter">
@@ -99,6 +110,7 @@
     <script src="track2Processor.js"></script>
     <script src="audioPlayer.js"></script>
     <script src="audioProcessor.js"></script>
+    <script src="originalWaveformViewer.js"></script>
     <script src="uiController.js"></script>
     <script src="overlapRateController.js"></script>
     <script src="app.js"></script>

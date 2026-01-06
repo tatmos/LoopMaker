@@ -9,8 +9,11 @@ class LoopMaker {
         this.audioProcessor = null;
         this.audioPlayer = null;
         this.waveformRenderer = null;
+        this.originalWaveformViewer = null;
         this.overlapRate = 0; // オーバーラップ率（0-50%）
         this.animationFrameId = null;
+        this.useRangeStart = 0; // 利用範囲の開始位置
+        this.useRangeEnd = 0; // 利用範囲の終了位置
         
         this.initializeElements();
         this.uiController = new UIController(this);
@@ -18,6 +21,8 @@ class LoopMaker {
     }
 
     initializeElements() {
+        const originalCanvas = document.getElementById('original-waveform');
+        const originalRuler = document.getElementById('ruler-original');
         const canvas1 = document.getElementById('waveform-track1');
         const canvas2 = document.getElementById('waveform-track2');
         const ruler1 = document.getElementById('ruler-track1');
@@ -25,21 +30,36 @@ class LoopMaker {
         this.levelMeter1 = document.getElementById('level-meter-track1');
         this.levelMeter2 = document.getElementById('level-meter-track2');
         
+        this.originalWaveformViewer = new OriginalWaveformViewer(originalCanvas, originalRuler);
+        this.originalWaveformViewer.onRangeChange = (startTime, endTime) => {
+            this.useRangeStart = startTime;
+            this.useRangeEnd = endTime;
+            this.updateBuffers();
+            this.drawWaveforms();
+        };
+        
         this.waveformRenderer = new WaveformRenderer(canvas1, canvas2, ruler1, ruler2);
     }
 
     updateBuffers() {
         if (!this.originalBuffer || !this.audioProcessor) return;
         
+        // 元波形から利用範囲を抽出
+        const useRangeBuffer = this.audioProcessor.extractRange(
+            this.originalBuffer,
+            this.useRangeStart,
+            this.useRangeEnd
+        );
+        
         // トラック1の加工後のバッファを生成
         this.track1Buffer = this.audioProcessor.track1Processor.createSaveBuffer(
-            this.originalBuffer, 
+            useRangeBuffer, 
             this.overlapRate
         );
         
         // トラック2の加工後のバッファを生成（トラック1と同じサイズにする）
         this.track2Buffer = this.audioProcessor.track2Processor.createSaveBuffer(
-            this.originalBuffer, 
+            useRangeBuffer, 
             this.overlapRate,
             this.track1Buffer.duration
         );

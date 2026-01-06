@@ -116,6 +116,48 @@ header h1 {
     margin-bottom: 30px;
 }
 
+.original-waveform-container {
+    margin-bottom: 25px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.original-waveform-container .waveform-wrapper {
+    position: relative;
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    height: 150px;
+}
+
+.drop-zone {
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.drop-zone.dragover {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.drop-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.6);
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.drop-overlay.hidden {
+    opacity: 0;
+}
+
 .track-container {
     margin-bottom: 25px;
     background: #f8f9fa;
