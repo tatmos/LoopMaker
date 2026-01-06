@@ -7,26 +7,11 @@ class Track2Processor {
     // 再生用: フェードアウト+無音バッファ生成（オーバーラップ率分引いた位置から開始、フェードアウト、トラック1と同じサイズに）
     createFadeOutBufferWithSilence(audioBuffer, overlapRate, targetDuration, fadeSettings = null) {
         if (overlapRate === 0) {
-            // オーバーラップ率が0の場合は元波形をそのまま返す（targetDurationに合わせて無音を追加）
+            // オーバーラップ率0のときはトラック2を無音にする
             const sampleRate = audioBuffer.sampleRate;
             const frameCount = Math.floor(targetDuration * sampleRate);
             const numChannels = audioBuffer.numberOfChannels;
-            const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-            
-            for (let channel = 0; channel < numChannels; channel++) {
-                const inputData = audioBuffer.getChannelData(channel);
-                const outputData = buffer.getChannelData(channel);
-                
-                for (let i = 0; i < frameCount; i++) {
-                    if (i < inputData.length) {
-                        outputData[i] = inputData[i];
-                    } else {
-                        outputData[i] = 0;
-                    }
-                }
-            }
-            
-            return buffer;
+            return this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
         }
         
         // createSaveBufferと同じ処理
@@ -36,27 +21,12 @@ class Track2Processor {
     // 保存用: トラック2の保存バッファ生成（オーバーラップ率分引いた位置から開始、フェードアウト、トラック1と同じサイズに）
     // fadeSettings: { mode: 'linear'|'log'|'exp'|'custom', controlX:number, controlY:number }
     createSaveBuffer(audioBuffer, overlapRate, targetDuration, fadeSettings = null) {
-        // オーバーラップ率が0の場合は元波形をそのまま返す（targetDurationに合わせて無音を追加）
+        // オーバーラップ率0の場合は無音バッファ（長さはtargetDurationに合わせる）
         if (overlapRate === 0) {
             const sampleRate = audioBuffer.sampleRate;
             const frameCount = Math.floor(targetDuration * sampleRate);
             const numChannels = audioBuffer.numberOfChannels;
-            const newBuffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-            
-            for (let channel = 0; channel < numChannels; channel++) {
-                const inputData = audioBuffer.getChannelData(channel);
-                const outputData = newBuffer.getChannelData(channel);
-                
-                for (let i = 0; i < frameCount; i++) {
-                    if (i < inputData.length) {
-                        outputData[i] = inputData[i];
-                    } else {
-                        outputData[i] = 0;
-                    }
-                }
-            }
-            
-            return newBuffer;
+            return this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
         }
         
         // オーバーラップ率からカットする長さを計算（50%で半分になる）
