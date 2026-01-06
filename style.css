@@ -146,6 +146,17 @@ header h1 {
     cursor: crosshair;
 }
 
+.time-ruler {
+    height: 30px;
+    background: #e9ecef;
+    border-top: 1px solid #dee2e6;
+    position: relative;
+    margin-top: 5px;
+    font-size: 11px;
+    color: #495057;
+    overflow: hidden;
+}
+
 .loop-controls {
     background: #f8f9fa;
     padding: 20px;
