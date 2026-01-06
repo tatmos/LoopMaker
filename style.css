@@ -449,6 +449,16 @@ header h1 {
     color: #155724;
 }
  
+.app-version {
+    position: fixed;
+    right: 8px;
+    bottom: 6px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.8);
+    pointer-events: none;
+    z-index: 1100;
+}
+ 
 /* 元波形用タイムルーラーの目盛り */
 .ruler-tick {
     position: absolute;
