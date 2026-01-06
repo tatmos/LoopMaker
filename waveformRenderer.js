@@ -21,12 +21,12 @@ class WaveformRenderer {
         const crossfadeStartTime = loopStartTime - crossfadeDuration;
         const effectiveDuration = loopStartTime;
 
-        // 両方のトラックで同じ時間軸（0からループ位置まで）を使用
         // トラック1: 0秒からループ位置まで（クロスフェード区間でフェードイン適用）
         this.drawTrack1(audioBuffer, 0, effectiveDuration, crossfadeStartTime, crossfadeDuration, effectiveDuration, width, height);
         
-        // トラック2: フェードアウト部分（ループ位置以降）
-        this.drawTrack2(audioBuffer, loopStartTime, audioBuffer.duration - loopStartTime, effectiveDuration, width, height);
+        // トラック2: ループ位置から波形最後まで（フェードアウト適用）
+        const track2Duration = audioBuffer.duration - loopStartTime;
+        this.drawTrack2(audioBuffer, loopStartTime, track2Duration, loopStartTime, track2Duration, effectiveDuration, width, height);
         
         // 再生位置ラインを描画
         if (currentPlaybackTime !== null) {
@@ -68,141 +68,61 @@ class WaveformRenderer {
         
         if (!audioBuffer || totalDuration <= 0) return;
 
-        // 背景をグレーで塗りつぶす
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(0, 0, width, height);
+        const waveformStartTime = displayStartTime;
+        const waveformEndTime = displayStartTime + displayDuration;
+        const displayEndTime = totalDuration;
 
-        const sampleRate = audioBuffer.sampleRate;
-        const numChannels = audioBuffer.numberOfChannels;
-        
-        // ステレオの場合は2行表示
-        const trackHeight = numChannels === 2 ? height / 2 : height;
-        
-        // 全体の時間軸に対するスケール
-        const timeScale = width / totalDuration;
-        const waveformStartX = displayStartTime * timeScale;
-        const waveformWidth = displayDuration * timeScale;
-        const waveformEndX = waveformStartX + waveformWidth;
-        const crossfadeStartX = crossfadeStartTime * timeScale;
-        const crossfadeEndX = (crossfadeStartTime + crossfadeDuration) * timeScale;
-        
-        // 波形が存在する範囲を描画（0秒からループ位置まで）
-        if (displayDuration > 0) {
-            const startSample = Math.floor(displayStartTime * sampleRate);
-            const endSample = Math.floor((displayStartTime + displayDuration) * sampleRate);
-            const samplesPerPixel = Math.max(1, Math.floor((endSample - startSample) / waveformWidth));
-
-            for (let channel = 0; channel < numChannels; channel++) {
-                const channelData = audioBuffer.getChannelData(channel);
-                const yOffset = channel * trackHeight;
-                
-                ctx.strokeStyle = channel === 0 ? '#667eea' : '#764ba2';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-
-                let firstPoint = true;
-                for (let x = 0; x < width; x++) {
-                    const timeAtX = (x / timeScale);
-                    const sampleIndex = Math.floor(timeAtX * sampleRate);
-                    if (sampleIndex >= channelData.length || sampleIndex < 0) continue;
-
-                    let sum = 0;
-                    let count = 0;
-                    const pixelStartSample = Math.floor((x / timeScale) * sampleRate);
-                    for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= 0; i++) {
-                        sum += Math.abs(channelData[pixelStartSample + i]);
-                        count++;
-                    }
-                    const avg = count > 0 ? sum / count : 0;
-
-                    // クロスフェード区間でのみフェードインを適用
-                    let fadedValue = avg;
-                    if (x >= crossfadeStartX && x < crossfadeEndX) {
-                        const fadeProgress = (x - crossfadeStartX) / (crossfadeEndX - crossfadeStartX);
-                        fadedValue = avg * fadeProgress;
-                    }
-
-                    const y = yOffset + (trackHeight / 2) - (fadedValue * trackHeight / 2 * 0.9);
-                    if (firstPoint) {
-                        ctx.moveTo(x, y);
-                        firstPoint = false;
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-
-                ctx.stroke();
+        WaveformDrawer.drawWaveform(
+            audioBuffer,
+            ctx,
+            waveformStartTime,
+            waveformEndTime,
+            displayStartTime,
+            displayEndTime,
+            width,
+            height,
+            {
+                fadeInStartTime: crossfadeStartTime,
+                fadeInEndTime: crossfadeStartTime + crossfadeDuration,
+                drawDCOffset: true,
+                backgroundColor: '#e0e0e0'
             }
-        }
+        );
     }
 
-    drawTrack2(audioBuffer, startTime, duration, totalDuration, width, height) {
+    drawTrack2(audioBuffer, waveformStartTime, waveformDuration, fadeOutStartTime, fadeOutDuration, totalDuration, width, height) {
         const ctx = this.ctx2;
         ctx.clearRect(0, 0, width, height);
         
         if (!audioBuffer || totalDuration <= 0) return;
 
-        // 背景をグレーで塗りつぶす
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(0, 0, width, height);
+        const waveformEndTime = waveformStartTime + waveformDuration;
+        // トラック2はループ位置から波形最後までを表示
+        // 表示範囲は0からループ位置まで（totalDuration）だが、
+        // ループ位置が左端（x=0）になるように表示する
+        // つまり、表示範囲の開始をループ位置に合わせる
+        const displayStartTime = waveformStartTime;
+        const displayEndTime = waveformStartTime + totalDuration;
 
-        const sampleRate = audioBuffer.sampleRate;
-        const numChannels = audioBuffer.numberOfChannels;
-        
-        // ステレオの場合は2行表示
-        const trackHeight = numChannels === 2 ? height / 2 : height;
-        
-        // 全体の時間軸に対するスケール
-        const timeScale = width / totalDuration;
-        const waveformStartX = startTime * timeScale;
-        const waveformWidth = duration * timeScale;
-        const waveformEndX = waveformStartX + waveformWidth;
-        
-        // 波形が存在する範囲のみ描画（ループ位置以降なので、通常は表示範囲外）
-        // ただし、ループ位置が波形の終端より前の場合、表示範囲内に収まる可能性がある
-        if (duration > 0 && waveformStartX < width) {
-            const startSample = Math.floor(startTime * sampleRate);
-            const endSample = Math.floor((startTime + duration) * sampleRate);
-            const samplesPerPixel = Math.max(1, Math.floor((endSample - startSample) / waveformWidth));
+        // フェードアウトは波形開始位置（ループ位置）から開始
+        const fadeOutEndTime = fadeOutStartTime + fadeOutDuration;
 
-            for (let channel = 0; channel < numChannels; channel++) {
-                const channelData = audioBuffer.getChannelData(channel);
-                const yOffset = channel * trackHeight;
-                
-                ctx.strokeStyle = channel === 0 ? '#667eea' : '#764ba2';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-
-                let firstPoint = true;
-                for (let x = Math.max(0, Math.floor(waveformStartX)); x < Math.min(width, Math.ceil(waveformEndX)); x++) {
-                    const relativeX = x - waveformStartX;
-                    const sampleIndex = startSample + Math.floor(relativeX * samplesPerPixel);
-                    if (sampleIndex >= channelData.length || sampleIndex < 0) continue;
-
-                    let sum = 0;
-                    let count = 0;
-                    for (let i = 0; i < samplesPerPixel && sampleIndex + i < channelData.length; i++) {
-                        sum += Math.abs(channelData[sampleIndex + i]);
-                        count++;
-                    }
-                    const avg = count > 0 ? sum / count : 0;
-
-                    // フェードアウト適用（波形内での相対位置）
-                    const progress = relativeX / waveformWidth;
-                    const fadedValue = avg * (1 - progress);
-
-                    const y = yOffset + (trackHeight / 2) - (fadedValue * trackHeight / 2 * 0.9);
-                    if (firstPoint) {
-                        ctx.moveTo(x, y);
-                        firstPoint = false;
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-
-                ctx.stroke();
+        WaveformDrawer.drawWaveform(
+            audioBuffer,
+            ctx,
+            waveformStartTime,
+            waveformEndTime,
+            displayStartTime,
+            displayEndTime,
+            width,
+            height,
+            {
+                fadeOutStartTime: fadeOutStartTime,
+                fadeOutEndTime: fadeOutEndTime,
+                drawDCOffset: true,
+                backgroundColor: '#e0e0e0'
             }
-        }
+        );
     }
 
     drawTimeRuler(totalDuration, width) {
