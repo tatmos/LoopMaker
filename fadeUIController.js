@@ -28,11 +28,31 @@ class FadeUIController {
         const handleMouseDown = (track, e) => {
             const canvas = track === 'track1' ? this.canvas1 : this.canvas2;
             const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / rect.width;
-            const y = (e.clientY - rect.top) / rect.height;
+            const xPx = e.clientX - rect.left;
+            const yPx = e.clientY - rect.top;
+            const xNorm = xPx / rect.width;
+            const yNorm = yPx / rect.height;
 
-            this.setControlPoint(track, x, y);
-            this.dragging = track;
+            // アンカー上かどうかを判定
+            const onAnchor = this.isOnAnchor(track, xPx, yPx);
+
+            if (onAnchor) {
+                // フェードコントローラとして動作（アンカーのみドラッグ可能）
+                this.setControlPoint(track, xNorm, yNorm);
+                this.dragging = track;
+                e.stopPropagation();
+                e.preventDefault();
+            } else {
+                // アンカー以外は波形クリックとして扱い、再生位置移動
+                if (this.loopMaker && this.loopMaker.track1Buffer && this.loopMaker.audioPlayer && this.loopMaker.audioPlayer.isPlaying) {
+                    const duration = this.loopMaker.track1Buffer.duration;
+                    if (duration > 0) {
+                        const ratio = Math.min(1, Math.max(0, xPx / rect.width));
+                        const targetTime = duration * ratio;
+                        this.loopMaker.seekTo(targetTime);
+                    }
+                }
+            }
         };
 
         const handleMouseMove = (e) => {
@@ -92,6 +112,47 @@ class FadeUIController {
     render() {
         this.drawTrackFade(this.ctx1, this.canvas1, 'track1', true);
         this.drawTrackFade(this.ctx2, this.canvas2, 'track2', false);
+    }
+
+    /**
+     * アンカー上かどうかのヒットテスト（キャンバス座標）
+     */
+    isOnAnchor(track, xPx, yPx) {
+        const canvas = track === 'track1' ? this.canvas1 : this.canvas2;
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+
+        const settings = track === 'track1'
+            ? this.loopMaker.fadeSettingsTrack1
+            : this.loopMaker.fadeSettingsTrack2;
+
+        if (!settings) return false;
+
+        // フェード幅（トラック長に対するフェード区間）
+        const r = this.loopMaker.overlapRate || 0;
+        if (r <= 0) return false;
+        const fadeWidthRatio = r / (100 - r);
+        const fadeWidth = width * Math.min(1, Math.max(0, fadeWidthRatio));
+        if (fadeWidth <= 0) return false;
+
+        const mode = settings.mode;
+        const cp = { controlX: settings.controlX, controlY: settings.controlY };
+
+        // アンカー位置（t=0.5 のカーブ上）
+        const tMid = 0.5;
+        let vMid = FadeCurves.evaluate(mode, tMid, cp);
+        if (track === 'track2') {
+            // トラック2はフェードアウト表示なので反転
+            vMid = 1 - vMid;
+        }
+        const xMid = tMid * fadeWidth;
+        const yMid = (1 - vMid) * height;
+
+        const dx = xPx - xMid;
+        const dy = yPx - yMid;
+        const distSq = dx * dx + dy * dy;
+        const radius = 10; // ピクセル
+        return distSq <= radius * radius;
     }
 
     drawTrackFade(ctx, canvas, track, isFadeIn) {

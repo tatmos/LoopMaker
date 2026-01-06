@@ -20,6 +20,7 @@
                     波形をアップロード
                 </label>
                 <button id="save-btn" class="btn btn-secondary" disabled>ファイル保存</button>
+                <input type="text" id="filename-input" class="filename-input" placeholder="loopmaker_output.wav" value="loopmaker_output.wav" disabled>
             </div>
 
             <div class="playback-controls">
@@ -104,6 +105,19 @@
         </div>
 
         <div id="status" class="status"></div>
+        
+        <!-- ファイル上書き確認ダイアログ -->
+        <div id="overwrite-dialog" class="overwrite-dialog hidden">
+            <div class="overwrite-dialog-content">
+                <h3>ファイルが既に存在します</h3>
+                <p id="overwrite-filename" class="overwrite-filename"></p>
+                <div class="overwrite-buttons">
+                    <button id="overwrite-confirm" class="btn btn-secondary">上書き</button>
+                    <button id="overwrite-rename" class="btn btn-primary">別名で保存</button>
+                    <button id="overwrite-cancel" class="btn btn-secondary">キャンセル</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="waveformDrawer.js"></script>

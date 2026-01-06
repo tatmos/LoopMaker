@@ -113,13 +113,13 @@ class AudioProcessor {
     }
 
     // ミックスしたバッファを保存
-    saveMixedBuffer(mixedBuffer) {
+    saveMixedBuffer(mixedBuffer, filename = 'loopmaker_output.wav') {
         const wav = this.bufferToWav(mixedBuffer);
         const blob = new Blob([wav], { type: 'audio/wav' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'loopmaker_output.wav';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

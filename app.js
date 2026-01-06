@@ -23,7 +23,7 @@ class LoopMaker {
         this.fadeSettingsTrack2 = {
             mode: 'log',
             controlX: 0.25,
-            controlY: 0.1
+            controlY: 0.9  // フェードアウトは反転（上側に配置）
         };
         
         this.initializeElements();

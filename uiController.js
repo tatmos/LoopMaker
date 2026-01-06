@@ -18,10 +18,27 @@ class UIController {
         this.dropOverlay = document.getElementById('drop-overlay');
         this.waveformTrack1 = document.getElementById('waveform-track1');
         this.waveformTrack2 = document.getElementById('waveform-track2');
+        this.filenameInput = document.getElementById('filename-input');
+        this.overwriteDialog = document.getElementById('overwrite-dialog');
+        this.overwriteFilename = document.getElementById('overwrite-filename');
+        this.overwriteConfirmBtn = document.getElementById('overwrite-confirm');
+        this.overwriteRenameBtn = document.getElementById('overwrite-rename');
+        this.overwriteCancelBtn = document.getElementById('overwrite-cancel');
         
         // ミュート状態
         this.track1Muted = false;
         this.track2Muted = false;
+        
+        // 上書き確認ダイアログのイベントリスナー
+        if (this.overwriteConfirmBtn) {
+            this.overwriteConfirmBtn.addEventListener('click', () => this.handleOverwriteConfirm());
+        }
+        if (this.overwriteRenameBtn) {
+            this.overwriteRenameBtn.addEventListener('click', () => this.handleOverwriteRename());
+        }
+        if (this.overwriteCancelBtn) {
+            this.overwriteCancelBtn.addEventListener('click', () => this.handleOverwriteCancel());
+        }
     }
 
     setupEventListeners() {
@@ -113,6 +130,20 @@ class UIController {
         this.showStatus('ファイルを読み込み中...', 'info');
 
         try {
+            // ファイル名を保存用ファイル名に反映
+            if (this.filenameInput && file && file.name) {
+                const originalName = file.name;
+                // 拡張子を .wav に統一（元が .wav ならそのまま）
+                const dotIndex = originalName.lastIndexOf('.');
+                let base = originalName;
+                if (dotIndex > 0) {
+                    base = originalName.substring(0, dotIndex);
+                }
+                const newName = base + '.wav';
+                this.filenameInput.value = newName;
+                this.filenameInput.disabled = false;
+            }
+
             const arrayBuffer = await file.arrayBuffer();
             this.loopMaker.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             this.loopMaker.originalBuffer = await this.loopMaker.audioContext.decodeAudioData(arrayBuffer);
@@ -190,9 +221,60 @@ class UIController {
         if (!this.loopMaker.mixedBuffer || !this.loopMaker.audioProcessor) return;
 
         try {
+            // ファイル名を取得
+            let filename = this.filenameInput ? this.filenameInput.value.trim() : 'loopmaker_output.wav';
+            if (!filename) {
+                filename = 'loopmaker_output.wav';
+            }
+            
+            // .wav拡張子がない場合は追加
+            if (!filename.toLowerCase().endsWith('.wav')) {
+                filename += '.wav';
+                if (this.filenameInput) {
+                    this.filenameInput.value = filename;
+                }
+            }
+
+            // File System Access APIが利用可能な場合
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const fileHandle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'WAV files',
+                            accept: { 'audio/wav': ['.wav'] }
+                        }]
+                    });
+                    
+                    // ファイルが既に存在するかチェック（File System Access APIでは自動的に警告が表示される）
+                    // ここでは直接保存を実行（ブラウザが同名ファイルの警告を自動表示）
+                    const writable = await fileHandle.createWritable();
+                    const wav = this.loopMaker.audioProcessor.bufferToWav(this.loopMaker.mixedBuffer);
+                    await writable.write(wav);
+                    await writable.close();
+                    
+                    // ファイル名を更新
+                    if (this.filenameInput) {
+                        this.filenameInput.value = fileHandle.name;
+                    }
+                    
+                    this.showStatus('ファイルを保存しました', 'success');
+                    return;
+                } catch (error) {
+                    // ユーザーがキャンセルした場合
+                    if (error.name === 'AbortError') {
+                        this.showStatus('保存をキャンセルしました', 'info');
+                        return;
+                    }
+                    // その他のエラーは通常のダウンロード方式にフォールバック
+                    console.warn('File System Access API error:', error);
+                }
+            }
+
+            // 通常のダウンロード方式（File System Access APIが利用不可の場合）
+            // ブラウザのダウンロードフォルダに同名ファイルがある場合、ブラウザが自動的に「(1)」などを付ける
             this.showStatus('ファイルを生成中...', 'info');
-            // ミックスしたバッファを保存
-            this.loopMaker.audioProcessor.saveMixedBuffer(this.loopMaker.mixedBuffer);
+            this.loopMaker.audioProcessor.saveMixedBuffer(this.loopMaker.mixedBuffer, filename);
             this.showStatus('ファイルを保存しました', 'success');
         } catch (error) {
             this.showStatus('保存エラー: ' + error.message, 'error');
@@ -203,6 +285,9 @@ class UIController {
     enableControls() {
         this.saveBtn.disabled = false;
         this.playBtn.disabled = false;
+        if (this.filenameInput) {
+            this.filenameInput.disabled = false;
+        }
         if (this.loopMaker.overlapRateController) {
             this.loopMaker.overlapRateController.enable();
         }
@@ -211,6 +296,76 @@ class UIController {
     showStatus(message, type = 'info') {
         this.status.textContent = message;
         this.status.className = 'status ' + type;
+    }
+
+    showOverwriteDialog(filename) {
+        if (!this.overwriteDialog || !this.overwriteFilename) return;
+        this.overwriteFilename.textContent = filename;
+        this.overwriteDialog.classList.remove('hidden');
+        this.pendingFilename = filename;
+    }
+
+    hideOverwriteDialog() {
+        if (!this.overwriteDialog) return;
+        this.overwriteDialog.classList.add('hidden');
+        this.pendingFilename = null;
+    }
+
+    handleOverwriteConfirm() {
+        if (!this.pendingFilename) return;
+        this.hideOverwriteDialog();
+        // 上書き保存を実行
+        this.showStatus('ファイルを生成中...', 'info');
+        this.loopMaker.audioProcessor.saveMixedBuffer(this.loopMaker.mixedBuffer, this.pendingFilename);
+        this.showStatus('ファイルを保存しました', 'success');
+    }
+
+    handleOverwriteRename() {
+        if (!this.pendingFilename) return;
+        this.hideOverwriteDialog();
+        // 別名で保存（File System Access APIを使用）
+        if ('showSaveFilePicker' in window) {
+            this.saveFileWithPicker(this.pendingFilename);
+        } else {
+            // 通常のダウンロード方式（ブラウザが自動的に「(1)」などを付ける）
+            this.showStatus('ファイルを生成中...', 'info');
+            this.loopMaker.audioProcessor.saveMixedBuffer(this.loopMaker.mixedBuffer, this.pendingFilename);
+            this.showStatus('ファイルを保存しました', 'success');
+        }
+    }
+
+    handleOverwriteCancel() {
+        this.hideOverwriteDialog();
+        this.showStatus('保存をキャンセルしました', 'info');
+    }
+
+    async saveFileWithPicker(suggestedName) {
+        try {
+            const fileHandle = await window.showSaveFilePicker({
+                suggestedName: suggestedName,
+                types: [{
+                    description: 'WAV files',
+                    accept: { 'audio/wav': ['.wav'] }
+                }]
+            });
+            
+            const writable = await fileHandle.createWritable();
+            const wav = this.loopMaker.audioProcessor.bufferToWav(this.loopMaker.mixedBuffer);
+            await writable.write(wav);
+            await writable.close();
+            
+            if (this.filenameInput) {
+                this.filenameInput.value = fileHandle.name;
+            }
+            
+            this.showStatus('ファイルを保存しました', 'success');
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                this.showStatus('保存をキャンセルしました', 'info');
+            } else {
+                this.showStatus('保存エラー: ' + error.message, 'error');
+            }
+        }
     }
 
     toggleMuteTrack1() {
