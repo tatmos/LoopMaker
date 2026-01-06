@@ -96,16 +96,17 @@ class WaveformRenderer {
         
         if (!audioBuffer || totalDuration <= 0) return;
 
-        const waveformEndTime = waveformStartTime + waveformDuration;
-        // トラック2はループ位置から波形最後までを表示
+        // フェードアウトは波形開始位置（ループ位置）から開始
+        const fadeOutEndTime = fadeOutStartTime + fadeOutDuration;
+        // フェードアウト終了位置以降は無音（波形を表示しない）
+        const waveformEndTime = fadeOutEndTime;
+        
+        // トラック2はループ位置からフェードアウト終了位置までを表示
         // 表示範囲は0からループ位置まで（totalDuration）だが、
         // ループ位置が左端（x=0）になるように表示する
         // つまり、表示範囲の開始をループ位置に合わせる
         const displayStartTime = waveformStartTime;
         const displayEndTime = waveformStartTime + totalDuration;
-
-        // フェードアウトは波形開始位置（ループ位置）から開始
-        const fadeOutEndTime = fadeOutStartTime + fadeOutDuration;
 
         WaveformDrawer.drawWaveform(
             audioBuffer,

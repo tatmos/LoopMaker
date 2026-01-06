@@ -1,207 +1,9 @@
-// 音声処理・生成クラス
+// 音声処理・生成クラス（ファイル保存専用）
 class AudioProcessor {
     constructor(audioContext) {
         this.audioContext = audioContext;
-        this.sourceNodes = [];
-        this.startTime = null;
-        this.loopDuration = 0;
-    }
-
-    createLoopBuffer(audioBuffer, loopStartTime, crossfadeStartTime, crossfadeDuration) {
-        const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(loopStartTime * sampleRate);
-        const numChannels = audioBuffer.numberOfChannels;
-        const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-        const crossfadeStartSample = Math.floor(crossfadeStartTime * sampleRate);
-        const crossfadeFrameCount = Math.floor(crossfadeDuration * sampleRate);
-
-        for (let channel = 0; channel < numChannels; channel++) {
-            const inputData = audioBuffer.getChannelData(channel);
-            const outputData = buffer.getChannelData(channel);
-
-            for (let i = 0; i < frameCount; i++) {
-                if (i < inputData.length) {
-                    let value = inputData[i];
-
-                    // クロスフェード区間でフェードインを適用
-                    if (i >= crossfadeStartSample && i < crossfadeStartSample + crossfadeFrameCount) {
-                        const fadeInProgress = (i - crossfadeStartSample) / crossfadeFrameCount;
-                        value *= fadeInProgress;
-                    }
-
-                    outputData[i] = value;
-                }
-            }
-        }
-
-        return buffer;
-    }
-
-    createFadeInBuffer(audioBuffer, startTime, duration) {
-        const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(duration * sampleRate);
-        const numChannels = audioBuffer.numberOfChannels;
-        const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-
-        for (let channel = 0; channel < numChannels; channel++) {
-            const inputData = audioBuffer.getChannelData(channel);
-            const outputData = buffer.getChannelData(channel);
-            const startSample = Math.floor(startTime * sampleRate);
-
-            for (let i = 0; i < frameCount; i++) {
-                const inputIndex = startSample + i;
-                if (inputIndex < inputData.length) {
-                    const fadeIn = i / frameCount; // 0 to 1
-                    outputData[i] = inputData[inputIndex] * fadeIn;
-                }
-            }
-        }
-
-        return buffer;
-    }
-
-    createFadeOutBuffer(audioBuffer, startTime, duration) {
-        const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(duration * sampleRate);
-        const numChannels = audioBuffer.numberOfChannels;
-        const buffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-
-        for (let channel = 0; channel < numChannels; channel++) {
-            const inputData = audioBuffer.getChannelData(channel);
-            const outputData = buffer.getChannelData(channel);
-            const startSample = Math.floor(startTime * sampleRate);
-
-            for (let i = 0; i < frameCount; i++) {
-                const inputIndex = startSample + i;
-                if (inputIndex < inputData.length) {
-                    const fadeOut = 1 - (i / frameCount); // 1 to 0
-                    outputData[i] = inputData[inputIndex] * fadeOut;
-                }
-            }
-        }
-
-        return buffer;
-    }
-
-    playPreview(audioBuffer, loopPosition, crossfadeDuration) {
-        if (!audioBuffer || this.isPlaying) return false;
-
-        try {
-            const loopStartTime = audioBuffer.duration * loopPosition;
-            const crossfadeStartTime = loopStartTime - crossfadeDuration;
-            const loopDuration = loopStartTime;
-
-            // メインループ: 0からループ位置までをループ再生（クロスフェード適用）
-            const loopBuffer = this.createLoopBuffer(audioBuffer, loopStartTime, crossfadeStartTime, crossfadeDuration);
-            const mainSource = this.audioContext.createBufferSource();
-            mainSource.buffer = loopBuffer;
-            mainSource.loop = true;
-            mainSource.loopStart = 0;
-            mainSource.loopEnd = loopDuration;
-            mainSource.connect(this.audioContext.destination);
-
-            // トラック1: フェードイン部分をループ再生（クロスフェード区間）
-            const source1 = this.audioContext.createBufferSource();
-            const gainNode1 = this.audioContext.createGain();
-            
-            source1.buffer = this.createFadeInBuffer(audioBuffer, crossfadeStartTime, crossfadeDuration);
-            source1.loop = true;
-            source1.loopStart = 0;
-            source1.loopEnd = crossfadeDuration;
-            
-            source1.connect(gainNode1);
-            gainNode1.connect(this.audioContext.destination);
-            
-            // トラック2: フェードアウト部分をループ再生（ループ位置以降）
-            const source2 = this.audioContext.createBufferSource();
-            const gainNode2 = this.audioContext.createGain();
-            
-            source2.buffer = this.createFadeOutBuffer(audioBuffer, loopStartTime, audioBuffer.duration - loopStartTime);
-            source2.loop = true;
-            source2.loopStart = 0;
-            source2.loopEnd = audioBuffer.duration - loopStartTime;
-            
-            source2.connect(gainNode2);
-            gainNode2.connect(this.audioContext.destination);
-
-            this.sourceNodes = [mainSource, source1, source2, gainNode1, gainNode2];
-            this.loopDuration = loopDuration;
-
-            // メインループ（0からループ位置まで）と2トラックを同時に再生
-            const startOffset = this.audioContext.currentTime;
-            mainSource.start(startOffset);
-            source1.start(startOffset);
-            source2.start(startOffset);
-
-            this.startTime = startOffset;
-            this.isPlaying = true;
-            return true;
-        } catch (error) {
-            console.error('再生エラー:', error);
-            this.isPlaying = false;
-            throw error;
-        }
-    }
-
-    stopPreview() {
-        this.sourceNodes.forEach(node => {
-            try {
-                if (node.stop) {
-                    node.stop();
-                }
-                node.disconnect();
-            } catch (e) {
-                // 既に停止している場合など
-            }
-        });
-        this.sourceNodes = [];
-        this.startTime = null;
-        this.isPlaying = false;
-    }
-
-    getCurrentPlaybackTime() {
-        if (!this.isPlaying || this.startTime === null || this.loopDuration === 0) {
-            return null;
-        }
-        const elapsed = this.audioContext.currentTime - this.startTime;
-        return elapsed % this.loopDuration;
-    }
-
-    createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration) {
-        const loopStartTime = audioBuffer.duration * loopPosition;
-        const crossfadeStartTime = loopStartTime - crossfadeDuration;
-        const effectiveDuration = loopStartTime;
-
-        // 新しいバッファを作成（ループ位置までの長さ）
-        const sampleRate = audioBuffer.sampleRate;
-        const frameCount = Math.floor(effectiveDuration * sampleRate);
-        const numChannels = audioBuffer.numberOfChannels;
-        const newBuffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
-
-        // クロスフェード区間の開始位置
-        const crossfadeStartSample = Math.floor(crossfadeStartTime * sampleRate);
-        const crossfadeFrameCount = Math.floor(crossfadeDuration * sampleRate);
-
-        for (let channel = 0; channel < numChannels; channel++) {
-            const inputData = audioBuffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-
-            for (let i = 0; i < frameCount; i++) {
-                if (i < inputData.length) {
-                    let value = inputData[i];
-
-                    // クロスフェード区間でフェードインを適用
-                    if (i >= crossfadeStartSample && i < crossfadeStartSample + crossfadeFrameCount) {
-                        const fadeInProgress = (i - crossfadeStartSample) / crossfadeFrameCount;
-                        value *= fadeInProgress;
-                    }
-
-                    outputData[i] = value;
-                }
-            }
-        }
-
-        return newBuffer;
+        this.track1Processor = new Track1Processor(audioContext);
+        this.track2Processor = new Track2Processor(audioContext);
     }
 
     bufferToWav(buffer) {
@@ -251,18 +53,36 @@ class AudioProcessor {
         return arrayBuffer;
     }
 
+
     saveFile(audioBuffer, loopPosition, crossfadeDuration) {
-        const newBuffer = this.createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration);
-        const wav = this.bufferToWav(newBuffer);
-        const blob = new Blob([wav], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'loopmaker_output.wav';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // トラック1を生成
+        const track1Buffer = this.track1Processor.createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration);
+        const wav1 = this.bufferToWav(track1Buffer);
+        const blob1 = new Blob([wav1], { type: 'audio/wav' });
+        const url1 = URL.createObjectURL(blob1);
+        const a1 = document.createElement('a');
+        a1.href = url1;
+        a1.download = 'loopmaker_track1.wav';
+        document.body.appendChild(a1);
+        a1.click();
+        document.body.removeChild(a1);
+        URL.revokeObjectURL(url1);
+
+        // トラック2を生成
+        const track2Buffer = this.track2Processor.createSaveBuffer(audioBuffer, loopPosition, crossfadeDuration);
+        const wav2 = this.bufferToWav(track2Buffer);
+        const blob2 = new Blob([wav2], { type: 'audio/wav' });
+        const url2 = URL.createObjectURL(blob2);
+        const a2 = document.createElement('a');
+        a2.href = url2;
+        a2.download = 'loopmaker_track2.wav';
+        document.body.appendChild(a2);
+        // 少し遅延させて2つ目のダウンロードを実行
+        setTimeout(() => {
+            a2.click();
+            document.body.removeChild(a2);
+            URL.revokeObjectURL(url2);
+        }, 100);
     }
 }
 

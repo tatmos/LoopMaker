@@ -30,19 +30,49 @@
 
         <div class="waveform-container">
             <div class="track-container">
-                <div class="track-label">トラック1（フェードイン）</div>
-                <div class="waveform-wrapper">
-                    <canvas id="waveform-track1" class="waveform-canvas"></canvas>
+                <div class="track-sidebar">
+                    <div id="level-meter-track1" class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                    <button id="mute-track1" class="speaker-btn" title="トラック1のミュート (M)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </button>
                 </div>
-                <div id="ruler-track1" class="time-ruler"></div>
+                <div class="track-content">
+                    <div class="track-header">
+                        <div class="track-label">トラック1（フェードイン）</div>
+                    </div>
+                    <div class="waveform-wrapper">
+                        <canvas id="waveform-track1" class="waveform-canvas"></canvas>
+                    </div>
+                    <div id="ruler-track1" class="time-ruler"></div>
+                </div>
             </div>
 
             <div class="track-container">
-                <div class="track-label">トラック2（フェードアウト）</div>
-                <div class="waveform-wrapper">
-                    <canvas id="waveform-track2" class="waveform-canvas"></canvas>
+                <div class="track-sidebar">
+                    <div id="level-meter-track2" class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                    <button id="mute-track2" class="speaker-btn" title="トラック2のミュート (M)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </button>
                 </div>
-                <div id="ruler-track2" class="time-ruler"></div>
+                <div class="track-content">
+                    <div class="track-header">
+                        <div class="track-label">トラック2（フェードアウト）</div>
+                    </div>
+                    <div class="waveform-wrapper">
+                        <canvas id="waveform-track2" class="waveform-canvas"></canvas>
+                    </div>
+                    <div id="ruler-track2" class="time-ruler"></div>
+                </div>
             </div>
         </div>
 
@@ -65,6 +95,9 @@
 
     <script src="waveformDrawer.js"></script>
     <script src="waveformRenderer.js"></script>
+    <script src="track1Processor.js"></script>
+    <script src="track2Processor.js"></script>
+    <script src="audioPlayer.js"></script>
     <script src="audioProcessor.js"></script>
     <script src="app.js"></script>
 </body>

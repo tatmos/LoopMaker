@@ -121,13 +121,83 @@ header h1 {
     background: #f8f9fa;
     border-radius: 12px;
     padding: 15px;
+    display: flex;
+    gap: 15px;
+}
+
+.track-sidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 60px;
+    flex-shrink: 0;
+}
+
+.track-content {
+    flex: 1;
+}
+
+.track-header {
+    margin-bottom: 10px;
 }
 
 .track-label {
     font-weight: 600;
     color: #667eea;
-    margin-bottom: 10px;
     font-size: 14px;
+}
+
+.level-meter {
+    width: 20px;
+    height: 150px;
+    background: #2c3e50;
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #34495e;
+}
+
+.level-bar {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: linear-gradient(to top, #e74c3c 0%, #f39c12 30%, #27ae60 60%, #2ecc71 100%);
+    transition: height 0.05s linear;
+    height: 0%;
+    border-radius: 0 0 8px 8px;
+}
+
+.speaker-btn {
+    background: transparent;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0;
+    color: #667eea;
+}
+
+.speaker-btn:hover {
+    background: #667eea;
+    color: white;
+    transform: scale(1.05);
+}
+
+.speaker-btn.muted {
+    background: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+.speaker-btn.muted:hover {
+    background: #c82333;
+    border-color: #c82333;
 }
 
 .waveform-wrapper {
