@@ -1,6 +1,6 @@
 // 範囲詳細設定コントローラクラス
 class RangeDetailController {
-    constructor(container, startCanvas, endCanvas, startRuler, endRuler, originalWaveformViewer) {
+    constructor(container, startCanvas, endCanvas, startRuler, endRuler, originalWaveformViewer, loopMaker) {
         this.container = container;
         this.startCanvas = startCanvas;
         this.startCtx = startCanvas.getContext('2d');
@@ -9,12 +9,16 @@ class RangeDetailController {
         this.startRuler = startRuler;
         this.endRuler = endRuler;
         this.originalWaveformViewer = originalWaveformViewer;
+        this.loopMaker = loopMaker;
         this.audioBuffer = null;
         this.startTime = 0;
         this.endTime = 0;
         this.zoomRange = 0.1; // 拡大範囲（秒）±0.1秒
         this.isDraggingStart = false;
         this.isDraggingEnd = false;
+        this.bpm = 120;
+        this.bpmEnabled = false;
+        this.metronomeEnabled = false;
         
         this.setupEventListeners();
         this.updateCanvasSize();
@@ -32,6 +36,9 @@ class RangeDetailController {
         const endPlus01 = document.getElementById('range-detail-end-plus-01');
         const endMinus001 = document.getElementById('range-detail-end-minus-001');
         const endPlus001 = document.getElementById('range-detail-end-plus-001');
+        const bpmInput = document.getElementById('bpm-input');
+        const bpmEnable = document.getElementById('bpm-enable');
+        const metronomeEnable = document.getElementById('metronome-enable');
         
         if (detailBtn) {
             detailBtn.addEventListener('click', () => this.show());
@@ -39,6 +46,34 @@ class RangeDetailController {
         
         if (closeBtn) {
             closeBtn.addEventListener('click', () => this.hide());
+        }
+
+        // BPM入力
+        if (bpmInput) {
+            bpmInput.addEventListener('change', () => {
+                const value = parseFloat(bpmInput.value);
+                if (!isNaN(value) && value > 0) {
+                    this.bpm = Math.max(20, Math.min(300, value));
+                    bpmInput.value = this.bpm.toString();
+                    this.updateBpmToAudioPlayer();
+                    this.render();
+                }
+            });
+        }
+
+        if (bpmEnable) {
+            bpmEnable.addEventListener('change', () => {
+                this.bpmEnabled = bpmEnable.checked;
+                this.updateBpmToAudioPlayer();
+                this.render();
+            });
+        }
+
+        if (metronomeEnable) {
+            metronomeEnable.addEventListener('change', () => {
+                this.metronomeEnabled = metronomeEnable.checked;
+                this.updateBpmToAudioPlayer();
+            });
         }
 
         // 開始位置ボタン
@@ -258,6 +293,22 @@ class RangeDetailController {
         this.unlockScroll();
     }
 
+    updateBpmToAudioPlayer() {
+        if (!this.loopMaker || !this.loopMaker.audioPlayer) return;
+        // BPM自体は常にセットし、メトロノーム有効時のみ使用
+        if (typeof this.loopMaker.audioPlayer.setBpm === 'function') {
+            this.loopMaker.audioPlayer.setBpm(this.bpm);
+        } else {
+            this.loopMaker.audioPlayer.bpm = this.bpm;
+        }
+        const enabled = this.bpmEnabled && this.metronomeEnabled;
+        if (typeof this.loopMaker.audioPlayer.setMetronomeEnabled === 'function') {
+            this.loopMaker.audioPlayer.setMetronomeEnabled(enabled);
+        } else {
+            this.loopMaker.audioPlayer.metronomeEnabled = enabled;
+        }
+    }
+
     nudge(type, delta) {
         if (!this.audioBuffer) return;
 
@@ -361,6 +412,26 @@ class RangeDetailController {
             }
         );
         
+        // ビートラインを描画（BPM指定が有効な場合）
+        if (this.bpmEnabled && this.bpm > 0) {
+            const beatInterval = 60 / this.bpm;
+            // 処理後バッファでは useRangeStart(=this.startTime) が 0秒になるので、
+            // ビートも this.startTime を基準に割り当てる
+            const anchor = this.startTime;
+            const firstBeatIndex = Math.ceil((viewStart - anchor) / beatInterval);
+            const lastBeatIndex = Math.floor((viewEnd - anchor) / beatInterval);
+            ctx.strokeStyle = '#f1c40f';
+            ctx.lineWidth = 1;
+            for (let i = firstBeatIndex; i <= lastBeatIndex; i++) {
+                const t = anchor + i * beatInterval;
+                const x = (t - viewStart) * timeScale;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+        }
+
         // マーカー線を描画（開始位置）
         const markerX = (this.startTime - viewStart) * timeScale;
         ctx.strokeStyle = '#667eea';
@@ -421,6 +492,25 @@ class RangeDetailController {
             }
         );
         
+        // ビートラインを描画（BPM指定が有効な場合）
+        if (this.bpmEnabled && this.bpm > 0) {
+            const beatInterval = 60 / this.bpm;
+            // 処理後バッファでは useRangeStart(=this.startTime) が 0秒になる
+            const anchor = this.startTime;
+            const firstBeatIndex = Math.ceil((viewStart - anchor) / beatInterval);
+            const lastBeatIndex = Math.floor((viewEnd - anchor) / beatInterval);
+            ctx.strokeStyle = '#f1c40f';
+            ctx.lineWidth = 1;
+            for (let i = firstBeatIndex; i <= lastBeatIndex; i++) {
+                const t = anchor + i * beatInterval;
+                const x = (t - viewStart) * timeScale;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+        }
+
         // マーカー線を描画（終了位置）
         const markerX = (this.endTime - viewStart) * timeScale;
         ctx.strokeStyle = '#e74c3c';

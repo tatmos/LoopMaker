@@ -12,6 +12,10 @@ class AudioPlayer {
         this.isPlaying = false;
         this.track1Processor = new Track1Processor(audioContext);
         this.track2Processor = new Track2Processor(audioContext);
+        this.bpm = 120;
+        this.metronomeEnabled = false;
+        this.metronomeSource = null;
+        this.metronomeGain = null;
     }
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
@@ -66,6 +70,44 @@ class AudioPlayer {
 
             // 2トラックを同時に再生（オフセット位置から）
             const startAt = this.audioContext.currentTime;
+
+            // メトロノーム（BPM指定かつ有効な場合）
+            if (this.metronomeEnabled && this.bpm > 0) {
+                const sampleRate = this.audioContext.sampleRate;
+                const length = Math.ceil(loopDuration * sampleRate);
+                const metBuffer = this.audioContext.createBuffer(1, length, sampleRate);
+                const data = metBuffer.getChannelData(0);
+                const interval = 60 / this.bpm;
+
+                for (let t = 0; t < loopDuration; t += interval) {
+                    const index = Math.floor(t * sampleRate);
+                    const clickLength = Math.floor(sampleRate * 0.03); // 約30msのクリック音
+                    for (let i = 0; i < clickLength && index + i < length; i++) {
+                        const env = 1 - (i / clickLength);
+                        // 短いホワイトノイズ系のクリック
+                        data[index + i] += (Math.random() * 2 - 1) * env * 0.6;
+                    }
+                }
+
+                const metSource = this.audioContext.createBufferSource();
+                const metGain = this.audioContext.createGain();
+                metGain.gain.value = 0.7;
+                metSource.buffer = metBuffer;
+                metSource.loop = true;
+                metSource.loopStart = 0;
+                metSource.loopEnd = loopDuration;
+
+                metSource.connect(metGain);
+                metGain.connect(this.audioContext.destination);
+
+                this.metronomeSource = metSource;
+                this.metronomeGain = metGain;
+                this.sourceNodes.push(metSource, metGain);
+
+                // ビートもオフセット位置から開始
+                metSource.start(startAt, offset);
+            }
+
             source1.start(startAt, offset);
             source2.start(startAt, offset);
 
@@ -96,6 +138,8 @@ class AudioPlayer {
         this.gainNode2 = null;
         this.analyser1 = null;
         this.analyser2 = null;
+        this.metronomeSource = null;
+        this.metronomeGain = null;
         this.startTime = null;
         this.isPlaying = false;
     }
@@ -116,6 +160,15 @@ class AudioPlayer {
         
         // 0-100の範囲に正規化
         return average / 255;
+    }
+
+    setBpm(bpm) {
+        if (!bpm || bpm <= 0) return;
+        this.bpm = bpm;
+    }
+
+    setMetronomeEnabled(enabled) {
+        this.metronomeEnabled = !!enabled;
     }
 
     setTrack1Mute(muted) {

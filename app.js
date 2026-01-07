@@ -71,7 +71,8 @@ class LoopMaker {
                 rangeDetailEndCanvas,
                 rangeDetailStartRuler,
                 rangeDetailEndRuler,
-                this.originalWaveformViewer
+                this.originalWaveformViewer,
+                this
             );
         }
     }
