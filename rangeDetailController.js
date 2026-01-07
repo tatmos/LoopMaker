@@ -34,11 +34,20 @@ class RangeDetailController {
         const startPlus01 = document.getElementById('range-detail-start-plus-01');
         const startMinus001 = document.getElementById('range-detail-start-minus-001');
         const startPlus001 = document.getElementById('range-detail-start-plus-001');
+        const startMinusSample = document.getElementById('range-detail-start-minus-sample');
+        const startPlusSample = document.getElementById('range-detail-start-plus-sample');
         const endMinus01 = document.getElementById('range-detail-end-minus-01');
         const endPlus01 = document.getElementById('range-detail-end-plus-01');
         const endMinus001 = document.getElementById('range-detail-end-minus-001');
         const endPlus001 = document.getElementById('range-detail-end-plus-001');
+        const startMinusBeat = document.getElementById('range-detail-start-minus-beat');
+        const startPlusBeat = document.getElementById('range-detail-start-plus-beat');
+        const endMinusBeat = document.getElementById('range-detail-end-minus-beat');
+        const endPlusBeat = document.getElementById('range-detail-end-plus-beat');
+        const endMinusSample = document.getElementById('range-detail-end-minus-sample');
+        const endPlusSample = document.getElementById('range-detail-end-plus-sample');
         const bpmInput = document.getElementById('bpm-input');
+        const bpmEstimateBtn = document.getElementById('bpm-estimate-btn');
         const bpmEnable = document.getElementById('bpm-enable');
         const metronomeEnable = document.getElementById('metronome-enable');
         const timesigNumInput = document.getElementById('timesig-numerator');
@@ -58,8 +67,21 @@ class RangeDetailController {
                 const value = parseFloat(bpmInput.value);
                 if (!isNaN(value) && value > 0) {
                     this.bpm = Math.max(20, Math.min(300, value));
-                    bpmInput.value = this.bpm.toString();
+                    bpmInput.value = this.bpm.toFixed(3);
                     this.updateBpmToAudioPlayer();
+                    this.render();
+                }
+            });
+        }
+
+        // BPM推定
+        if (bpmEstimateBtn) {
+            bpmEstimateBtn.addEventListener('click', () => {
+                const estimated = this.estimateBpmFromRange();
+                if (estimated && bpmInput) {
+                    this.bpm = estimated;
+                    bpmInput.value = this.bpm.toFixed(3);
+                    this.updateBpmToAudioPlayer(true);
                     this.render();
                 }
             });
@@ -117,6 +139,18 @@ class RangeDetailController {
         if (startPlus001) {
             startPlus001.addEventListener('click', () => this.nudge('start', 0.01));
         }
+        if (startMinusBeat) {
+            startMinusBeat.addEventListener('click', () => this.nudgeBeat('start', -1));
+        }
+        if (startPlusBeat) {
+            startPlusBeat.addEventListener('click', () => this.nudgeBeat('start', 1));
+        }
+        if (startMinusSample) {
+            startMinusSample.addEventListener('click', () => this.nudgeSample('start', -1));
+        }
+        if (startPlusSample) {
+            startPlusSample.addEventListener('click', () => this.nudgeSample('start', 1));
+        }
 
         // 終了位置ボタン
         if (endMinus01) {
@@ -130,6 +164,18 @@ class RangeDetailController {
         }
         if (endPlus001) {
             endPlus001.addEventListener('click', () => this.nudge('end', 0.01));
+        }
+        if (endMinusBeat) {
+            endMinusBeat.addEventListener('click', () => this.nudgeBeat('end', -1));
+        }
+        if (endPlusBeat) {
+            endPlusBeat.addEventListener('click', () => this.nudgeBeat('end', 1));
+        }
+        if (endMinusSample) {
+            endMinusSample.addEventListener('click', () => this.nudgeSample('end', -1));
+        }
+        if (endPlusSample) {
+            endPlusSample.addEventListener('click', () => this.nudgeSample('end', 1));
         }
 
         // 開始位置キャンバスのイベント
@@ -367,6 +413,101 @@ class RangeDetailController {
             const clamped = Math.max(minTime, Math.min(maxTime, target));
             this.applyClampedEndTime(clamped);
         }
+    }
+
+    nudgeBeat(type, beats) {
+        if (!this.audioBuffer) return;
+        const beatSec = this.bpm > 0 ? (60 / this.bpm) * (4 / this.timeSigDenominator) : 1.0;
+        const delta = beats * beatSec;
+        this.nudge(type, delta);
+    }
+
+    nudgeSample(type, samples) {
+        if (!this.audioBuffer || !this.audioBuffer.sampleRate) return;
+        const secPerSample = 1 / this.audioBuffer.sampleRate;
+        const delta = samples * secPerSample;
+        this.nudge(type, delta);
+    }
+
+    // 現在の範囲から単純な自己相関ベースでBPMを推定
+    estimateBpmFromRange() {
+        if (!this.audioBuffer) return null;
+
+        const sampleRate = this.audioBuffer.sampleRate;
+        const channelData = this.audioBuffer.getChannelData(0);
+        if (!channelData) return null;
+
+        const start = Math.max(0, this.startTime);
+        const end = Math.min(this.audioBuffer.duration, this.endTime);
+        const startSample = Math.floor(start * sampleRate);
+        const endSample = Math.floor(end * sampleRate);
+        let length = endSample - startSample;
+
+        // 最低0.5秒、最大30秒に制限
+        const minLen = Math.floor(sampleRate * 0.5);
+        const maxLen = Math.floor(sampleRate * 30);
+        if (length < minLen) {
+            return null;
+        }
+        length = Math.min(length, maxLen);
+
+        // エンベロープを低サンプリングで作成
+        const envRate = 200; // 200Hz
+        const step = Math.max(1, Math.floor(sampleRate / envRate));
+        const envSize = Math.floor(length / step);
+        if (envSize < 10) return null;
+
+        const env = new Float32Array(envSize);
+        let idx = 0;
+        for (let i = 0; i < envSize; i++) {
+            let sum = 0;
+            let count = 0;
+            for (let j = 0; j < step && idx < length; j++, idx++) {
+                const v = channelData[startSample + idx];
+                sum += Math.abs(v);
+                count++;
+            }
+            env[i] = count > 0 ? sum / count : 0;
+        }
+
+        // 平均を引いて正規化
+        let mean = 0;
+        for (let i = 0; i < envSize; i++) mean += env[i];
+        mean /= envSize;
+        let energy = 0;
+        for (let i = 0; i < envSize; i++) {
+            env[i] -= mean;
+            energy += env[i] * env[i];
+        }
+        if (energy === 0) return null;
+
+        // 自己相関を計算してラグを探索
+        const envFs = sampleRate / step;
+        const minBpm = 40;
+        const maxBpm = 240;
+        const minLag = Math.floor(envFs * 60 / maxBpm);
+        const maxLag = Math.floor(envFs * 60 / minBpm);
+
+        let bestLag = -1;
+        let bestCorr = -Infinity;
+        for (let lag = minLag; lag <= maxLag; lag++) {
+            let corr = 0;
+            for (let i = 0; i + lag < envSize; i++) {
+                corr += env[i] * env[i + lag];
+            }
+            if (corr > bestCorr) {
+                bestCorr = corr;
+                bestLag = lag;
+            }
+        }
+
+        if (bestLag <= 0) return null;
+        const bpm = (60 * envFs) / bestLag;
+        if (!isFinite(bpm) || bpm <= 0) return null;
+
+        // 許容範囲に丸め
+        const clamped = Math.max(20, Math.min(300, bpm));
+        return clamped;
     }
 
     applyClampedStartTime(time) {

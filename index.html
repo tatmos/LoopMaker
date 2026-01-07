@@ -46,9 +46,10 @@
                     <div class="range-detail-header">
                         <h3>範囲詳細設定</h3>
                         <div class="bpm-controls">
+                            <button id="bpm-estimate-btn" class="range-detail-btn">BPM推定</button>
                             <label class="bpm-label">
                                 BPM
-                                <input type="number" id="bpm-input" class="bpm-input" min="20" max="300" step="1" value="120">
+                                <input type="number" id="bpm-input" class="bpm-input" min="20" max="300" step="0.001" value="120.000">
                             </label>
                             <label class="bpm-timesig">
                                 拍子
@@ -75,6 +76,10 @@
                                     <button id="range-detail-start-plus-01" class="range-detail-btn">+0.1s</button>
                                     <button id="range-detail-start-minus-001" class="range-detail-btn">-0.01s</button>
                                     <button id="range-detail-start-plus-001" class="range-detail-btn">+0.01s</button>
+                                    <button id="range-detail-start-minus-beat" class="range-detail-btn">-1Beat</button>
+                                    <button id="range-detail-start-plus-beat" class="range-detail-btn">+1Beat</button>
+                                    <button id="range-detail-start-minus-sample" class="range-detail-btn">-1Sample</button>
+                                    <button id="range-detail-start-plus-sample" class="range-detail-btn">+1Sample</button>
                                 </div>
                             </div>
                             <canvas id="range-detail-start" class="range-detail-canvas"></canvas>
@@ -88,6 +93,10 @@
                                     <button id="range-detail-end-plus-01" class="range-detail-btn">+0.1s</button>
                                     <button id="range-detail-end-minus-001" class="range-detail-btn">-0.01s</button>
                                     <button id="range-detail-end-plus-001" class="range-detail-btn">+0.01s</button>
+                                    <button id="range-detail-end-minus-beat" class="range-detail-btn">-1Beat</button>
+                                    <button id="range-detail-end-plus-beat" class="range-detail-btn">+1Beat</button>
+                                    <button id="range-detail-end-minus-sample" class="range-detail-btn">-1Sample</button>
+                                    <button id="range-detail-end-plus-sample" class="range-detail-btn">+1Sample</button>
                                 </div>
                             </div>
                             <canvas id="range-detail-end" class="range-detail-canvas"></canvas>
