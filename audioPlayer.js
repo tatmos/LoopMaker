@@ -16,6 +16,8 @@ class AudioPlayer {
         this.metronomeEnabled = false;
         this.metronomeSource = null;
         this.metronomeGain = null;
+        this.timeSigNumerator = 4;
+        this.timeSigDenominator = 4;
     }
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
@@ -77,15 +79,17 @@ class AudioPlayer {
                 const length = Math.ceil(loopDuration * sampleRate);
                 const metBuffer = this.audioContext.createBuffer(1, length, sampleRate);
                 const data = metBuffer.getChannelData(0);
-                const interval = 60 / this.bpm;
+                const beatInterval = (60 / this.bpm) * (4 / this.timeSigDenominator);
+                const measureBeats = Math.max(1, this.timeSigNumerator);
 
-                for (let t = 0; t < loopDuration; t += interval) {
+                for (let beatIndex = 0, t = 0; t < loopDuration; beatIndex++, t += beatInterval) {
+                    const isMeasureHead = (beatIndex % measureBeats === 0);
                     const index = Math.floor(t * sampleRate);
                     const clickLength = Math.floor(sampleRate * 0.03); // 約30msのクリック音
+                    const gain = isMeasureHead ? 0.9 : 0.6;
                     for (let i = 0; i < clickLength && index + i < length; i++) {
                         const env = 1 - (i / clickLength);
-                        // 短いホワイトノイズ系のクリック
-                        data[index + i] += (Math.random() * 2 - 1) * env * 0.6;
+                        data[index + i] += (Math.random() * 2 - 1) * env * gain;
                     }
                 }
 
@@ -169,6 +173,15 @@ class AudioPlayer {
 
     setMetronomeEnabled(enabled) {
         this.metronomeEnabled = !!enabled;
+    }
+
+    setTimeSignature(numerator, denominator) {
+        if (numerator && numerator > 0) {
+            this.timeSigNumerator = numerator;
+        }
+        if (denominator && denominator > 0) {
+            this.timeSigDenominator = denominator;
+        }
     }
 
     setTrack1Mute(muted) {

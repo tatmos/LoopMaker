@@ -9,7 +9,7 @@ class WaveformRenderer {
         this.ruler2 = ruler2;
     }
 
-    render(track1Buffer, track2Buffer, currentPlaybackTime = null) {
+    render(track1Buffer, track2Buffer, currentPlaybackTime = null, bpmOptions = null) {
         if (!track1Buffer || !track2Buffer) return;
 
         const width = this.canvas1.width = this.canvas1.offsetWidth;
@@ -21,10 +21,10 @@ class WaveformRenderer {
         const track1Duration = track1Buffer.duration;
 
         // トラック1: 加工後のバッファを表示
-        this.drawTrack1(track1Buffer, track1Duration, width, height);
+        this.drawTrack1(track1Buffer, track1Duration, width, height, bpmOptions);
         
         // トラック2: 加工後のバッファを表示
-        this.drawTrack2(track2Buffer, track1Duration, width, height);
+        this.drawTrack2(track2Buffer, track1Duration, width, height, bpmOptions);
         
         // 再生位置ラインを描画
         if (currentPlaybackTime !== null) {
@@ -60,7 +60,7 @@ class WaveformRenderer {
         ctx2.stroke();
     }
 
-    drawTrack1(track1Buffer, totalDuration, width, height) {
+    drawTrack1(track1Buffer, totalDuration, width, height, bpmOptions) {
         const ctx = this.ctx1;
         ctx.clearRect(0, 0, width, height);
         
@@ -89,9 +89,12 @@ class WaveformRenderer {
                 backgroundColor: '#e0e0e0'
             }
         );
+
+        // BPMライン（BPM指定が有効な場合）
+        this.drawBpmLines(ctx, totalDuration, width, height, bpmOptions);
     }
 
-    drawTrack2(track2Buffer, totalDuration, width, height) {
+    drawTrack2(track2Buffer, totalDuration, width, height, bpmOptions) {
         const ctx = this.ctx2;
         ctx.clearRect(0, 0, width, height);
         
@@ -121,6 +124,34 @@ class WaveformRenderer {
                 backgroundColor: '#e0e0e0'
             }
         );
+
+        // BPMライン（BPM指定が有効な場合）
+        this.drawBpmLines(ctx, totalDuration, width, height, bpmOptions);
+    }
+
+    drawBpmLines(ctx, totalDuration, width, height, bpmOptions) {
+        if (!bpmOptions) return;
+        const { enabled, bpm, numerator, denominator } = bpmOptions;
+        if (!enabled || !bpm || bpm <= 0 || !denominator) return;
+
+        const beatInterval = (60 / bpm) * (4 / denominator);
+        if (beatInterval <= 0) return;
+
+        const timeScale = width / totalDuration;
+        const firstBeatIndex = 0;
+        const lastBeatIndex = Math.floor(totalDuration / beatInterval);
+
+        for (let i = firstBeatIndex; i <= lastBeatIndex; i++) {
+            const t = i * beatInterval;
+            const x = t * timeScale;
+            const isMeasureLine = numerator > 0 ? (i % numerator === 0) : false;
+            ctx.strokeStyle = isMeasureLine ? '#f39c12' : '#f1c40f';
+            ctx.lineWidth = isMeasureLine ? 2 : 1;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
     }
 
     drawTimeRuler(totalDuration, width) {

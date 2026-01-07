@@ -149,10 +149,35 @@ class LoopMaker {
     drawWaveforms() {
         if (!this.track1Buffer || !this.track2Buffer || !this.waveformRenderer) return;
         const currentTime = this.audioPlayer ? this.audioPlayer.getCurrentPlaybackTime() : null;
-        this.waveformRenderer.render(this.track1Buffer, this.track2Buffer, currentTime);
+        const bpmOptions = {
+            enabled: this.rangeDetailController ? (this.rangeDetailController.bpmEnabled) : false,
+            bpm: this.rangeDetailController ? this.rangeDetailController.bpm : 120,
+            numerator: this.rangeDetailController ? this.rangeDetailController.timeSigNumerator : 4,
+            denominator: this.rangeDetailController ? this.rangeDetailController.timeSigDenominator : 4
+        };
+        this.waveformRenderer.render(this.track1Buffer, this.track2Buffer, currentTime, bpmOptions);
         if (this.fadeUIController) {
             this.fadeUIController.render();
         }
+    }
+
+    // BPM/メトロノーム設定変更時に即反映するための再生再起動
+    restartPlaybackIfPlaying() {
+        if (!this.audioPlayer || !this.audioPlayer.isPlaying) return;
+        if (!this.track1Buffer || !this.track2Buffer) return;
+        const current = this.audioPlayer.getCurrentPlaybackTime() || 0;
+        this.audioPlayer.stopPreview();
+        this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, current);
+        // ミュート状態を再適用（UI側の状態を参照）
+        if (this.uiController) {
+            if (this.uiController.track1Muted) {
+                this.audioPlayer.setTrack1Mute(true);
+            }
+            if (this.uiController.track2Muted) {
+                this.audioPlayer.setTrack2Mute(true);
+            }
+        }
+        this.startPlaybackAnimation();
     }
 
     startPlaybackAnimation() {

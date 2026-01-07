@@ -19,6 +19,8 @@ class RangeDetailController {
         this.bpm = 120;
         this.bpmEnabled = false;
         this.metronomeEnabled = false;
+        this.timeSigNumerator = 4;
+        this.timeSigDenominator = 4;
         
         this.setupEventListeners();
         this.updateCanvasSize();
@@ -39,6 +41,8 @@ class RangeDetailController {
         const bpmInput = document.getElementById('bpm-input');
         const bpmEnable = document.getElementById('bpm-enable');
         const metronomeEnable = document.getElementById('metronome-enable');
+        const timesigNumInput = document.getElementById('timesig-numerator');
+        const timesigDenInput = document.getElementById('timesig-denominator');
         
         if (detailBtn) {
             detailBtn.addEventListener('click', () => this.show());
@@ -64,7 +68,7 @@ class RangeDetailController {
         if (bpmEnable) {
             bpmEnable.addEventListener('change', () => {
                 this.bpmEnabled = bpmEnable.checked;
-                this.updateBpmToAudioPlayer();
+                this.updateBpmToAudioPlayer(true);
                 this.render();
             });
         }
@@ -72,7 +76,31 @@ class RangeDetailController {
         if (metronomeEnable) {
             metronomeEnable.addEventListener('change', () => {
                 this.metronomeEnabled = metronomeEnable.checked;
-                this.updateBpmToAudioPlayer();
+                this.updateBpmToAudioPlayer(true);
+            });
+        }
+
+        if (timesigNumInput) {
+            timesigNumInput.addEventListener('change', () => {
+                const value = parseInt(timesigNumInput.value, 10);
+                if (!isNaN(value) && value > 0) {
+                    this.timeSigNumerator = Math.max(1, Math.min(16, value));
+                    timesigNumInput.value = this.timeSigNumerator.toString();
+                    this.updateBpmToAudioPlayer(true);
+                    this.render();
+                }
+            });
+        }
+
+        if (timesigDenInput) {
+            timesigDenInput.addEventListener('change', () => {
+                const value = parseInt(timesigDenInput.value, 10);
+                if (!isNaN(value) && value > 0) {
+                    this.timeSigDenominator = Math.max(1, Math.min(16, value));
+                    timesigDenInput.value = this.timeSigDenominator.toString();
+                    this.updateBpmToAudioPlayer(true);
+                    this.render();
+                }
             });
         }
 
@@ -293,7 +321,7 @@ class RangeDetailController {
         this.unlockScroll();
     }
 
-    updateBpmToAudioPlayer() {
+    updateBpmToAudioPlayer(shouldRestart = false) {
         if (!this.loopMaker || !this.loopMaker.audioPlayer) return;
         // BPM自体は常にセットし、メトロノーム有効時のみ使用
         if (typeof this.loopMaker.audioPlayer.setBpm === 'function') {
@@ -301,11 +329,25 @@ class RangeDetailController {
         } else {
             this.loopMaker.audioPlayer.bpm = this.bpm;
         }
+        if (typeof this.loopMaker.audioPlayer.setTimeSignature === 'function') {
+            this.loopMaker.audioPlayer.setTimeSignature(this.timeSigNumerator, this.timeSigDenominator);
+        } else {
+            this.loopMaker.audioPlayer.timeSigNumerator = this.timeSigNumerator;
+            this.loopMaker.audioPlayer.timeSigDenominator = this.timeSigDenominator;
+        }
         const enabled = this.bpmEnabled && this.metronomeEnabled;
         if (typeof this.loopMaker.audioPlayer.setMetronomeEnabled === 'function') {
             this.loopMaker.audioPlayer.setMetronomeEnabled(enabled);
         } else {
             this.loopMaker.audioPlayer.metronomeEnabled = enabled;
+        }
+        // 再生中なら即時反映
+        if (shouldRestart && typeof this.loopMaker.restartPlaybackIfPlaying === 'function') {
+            this.loopMaker.restartPlaybackIfPlaying();
+        }
+        // トラック波形にもラインを反映
+        if (typeof this.loopMaker.drawWaveforms === 'function') {
+            this.loopMaker.drawWaveforms();
         }
     }
 
@@ -414,17 +456,17 @@ class RangeDetailController {
         
         // ビートラインを描画（BPM指定が有効な場合）
         if (this.bpmEnabled && this.bpm > 0) {
-            const beatInterval = 60 / this.bpm;
-            // 処理後バッファでは useRangeStart(=this.startTime) が 0秒になるので、
-            // ビートも this.startTime を基準に割り当てる
+            // BPMは「4分音符基準」。拍子の分母によって拍の長さを補正する。
+            const beatInterval = (60 / this.bpm) * (4 / this.timeSigDenominator);
             const anchor = this.startTime;
             const firstBeatIndex = Math.ceil((viewStart - anchor) / beatInterval);
             const lastBeatIndex = Math.floor((viewEnd - anchor) / beatInterval);
-            ctx.strokeStyle = '#f1c40f';
-            ctx.lineWidth = 1;
             for (let i = firstBeatIndex; i <= lastBeatIndex; i++) {
                 const t = anchor + i * beatInterval;
                 const x = (t - viewStart) * timeScale;
+                const isMeasureLine = (this.timeSigNumerator > 0) ? (i % this.timeSigNumerator === 0) : false;
+                ctx.strokeStyle = isMeasureLine ? '#f39c12' : '#f1c40f';
+                ctx.lineWidth = isMeasureLine ? 2 : 1;
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, height);
@@ -494,16 +536,16 @@ class RangeDetailController {
         
         // ビートラインを描画（BPM指定が有効な場合）
         if (this.bpmEnabled && this.bpm > 0) {
-            const beatInterval = 60 / this.bpm;
-            // 処理後バッファでは useRangeStart(=this.startTime) が 0秒になる
+            const beatInterval = (60 / this.bpm) * (4 / this.timeSigDenominator);
             const anchor = this.startTime;
             const firstBeatIndex = Math.ceil((viewStart - anchor) / beatInterval);
             const lastBeatIndex = Math.floor((viewEnd - anchor) / beatInterval);
-            ctx.strokeStyle = '#f1c40f';
-            ctx.lineWidth = 1;
             for (let i = firstBeatIndex; i <= lastBeatIndex; i++) {
                 const t = anchor + i * beatInterval;
                 const x = (t - viewStart) * timeScale;
+                const isMeasureLine = (this.timeSigNumerator > 0) ? (i % this.timeSigNumerator === 0) : false;
+                ctx.strokeStyle = isMeasureLine ? '#f39c12' : '#f1c40f';
+                ctx.lineWidth = isMeasureLine ? 2 : 1;
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, height);

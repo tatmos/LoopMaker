@@ -291,6 +291,20 @@ header h1 {
     border: 1px solid #ced4da;
 }
 
+.bpm-timesig {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.timesig-input {
+    width: 40px;
+    padding: 3px 6px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+}
+
 .bpm-toggle {
     display: flex;
     align-items: center;
