@@ -47,12 +47,33 @@ class LoopMaker {
         this.originalWaveformViewer.onRangeChange = (startTime, endTime) => {
             this.useRangeStart = startTime;
             this.useRangeEnd = endTime;
+            // 範囲詳細設定コントローラにも反映
+            if (this.rangeDetailController) {
+                this.rangeDetailController.setRange(startTime, endTime);
+            }
             this.updateBuffers();
             this.drawWaveforms();
         };
         
         this.waveformRenderer = new WaveformRenderer(canvas1, canvas2, ruler1, ruler2);
         this.fadeUIController = new FadeUIController(this, fadeCanvas1, fadeCanvas2);
+        
+        // 範囲詳細設定コントローラを初期化
+        const rangeDetailContainer = document.getElementById('range-detail-container');
+        const rangeDetailStartCanvas = document.getElementById('range-detail-start');
+        const rangeDetailEndCanvas = document.getElementById('range-detail-end');
+        const rangeDetailStartRuler = document.getElementById('ruler-detail-start');
+        const rangeDetailEndRuler = document.getElementById('ruler-detail-end');
+        if (rangeDetailContainer && rangeDetailStartCanvas && rangeDetailEndCanvas) {
+            this.rangeDetailController = new RangeDetailController(
+                rangeDetailContainer,
+                rangeDetailStartCanvas,
+                rangeDetailEndCanvas,
+                rangeDetailStartRuler,
+                rangeDetailEndRuler,
+                this.originalWaveformViewer
+            );
+        }
     }
 
     updateBuffers() {

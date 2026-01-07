@@ -171,6 +171,12 @@ class UIController {
                 }
             }
             
+            // 範囲詳細設定コントローラに設定
+            if (this.loopMaker.rangeDetailController) {
+                this.loopMaker.rangeDetailController.setAudioBuffer(this.loopMaker.originalBuffer);
+                this.loopMaker.rangeDetailController.setRange(this.loopMaker.useRangeStart, this.loopMaker.useRangeEnd);
+            }
+            
             // 初期オーバーラップ率を0に設定
             if (this.loopMaker.overlapRateController) {
                 this.loopMaker.overlapRateController.setValue(0);
@@ -206,7 +212,22 @@ class UIController {
             this.stopBtn.disabled = false;
 
             // トラック1と2の加工後のバッファを再生
-            this.loopMaker.audioPlayer.playPreviewWithBuffers(this.loopMaker.track1Buffer, this.loopMaker.track2Buffer);
+            const started = this.loopMaker.audioPlayer.playPreviewWithBuffers(this.loopMaker.track1Buffer, this.loopMaker.track2Buffer);
+            if (!started) {
+                // 既に再生中などで開始できなかった場合はボタン状態を元に戻す
+                this.playBtn.disabled = false;
+                this.stopBtn.disabled = true;
+                return;
+            }
+
+            // 再生開始時点でのミュート状態を反映
+            if (this.track1Muted) {
+                this.loopMaker.audioPlayer.setTrack1Mute(true);
+            }
+            if (this.track2Muted) {
+                this.loopMaker.audioPlayer.setTrack2Mute(true);
+            }
+
             this.loopMaker.startPlaybackAnimation();
             this.showStatus('再生中...', 'info');
         } catch (error) {
@@ -300,6 +321,10 @@ class UIController {
         }
         if (this.loopMaker.overlapRateController) {
             this.loopMaker.overlapRateController.enable();
+        }
+        const rangeDetailBtn = document.getElementById('range-detail-btn');
+        if (rangeDetailBtn) {
+            rangeDetailBtn.disabled = false;
         }
     }
 

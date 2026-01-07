@@ -11,7 +11,7 @@
         <header>
             <h1>LoopMaker</h1>
             <p class="subtitle">誰でも簡単に使えるループ波形エディタ by <a href="https://github.com/sponsors/tatmos">tatmos</a></p>
-            <div class="app-version">v1.0.4</div>
+            <div class="app-version">v1.1.0</div>
         </header>
 
         <div class="controls-panel">
@@ -35,12 +35,47 @@
             <div class="original-waveform-container">
                 <div class="track-header">
                     <div class="track-label">元波形（利用範囲指定）</div>
+                    <button id="range-detail-btn" class="btn btn-small" disabled>詳細設定</button>
                 </div>
                 <div class="waveform-wrapper drop-zone" id="original-drop-zone">
                     <div class="drop-overlay" id="drop-overlay">波形をアップロード</div>
                     <canvas id="original-waveform" class="waveform-canvas"></canvas>
                 </div>
                 <div id="ruler-original" class="time-ruler"></div>
+                <div id="range-detail-container" class="range-detail-container hidden">
+                    <div class="range-detail-header">
+                        <h3>範囲詳細設定</h3>
+                        <button id="range-detail-close" class="btn btn-small">閉じる</button>
+                    </div>
+                    <div class="range-detail-views">
+                        <div class="range-detail-view">
+                            <div class="range-detail-label">
+                                開始位置
+                                <div class="range-detail-controls">
+                                    <button id="range-detail-start-minus-01" class="range-detail-btn">-0.1s</button>
+                                    <button id="range-detail-start-plus-01" class="range-detail-btn">+0.1s</button>
+                                    <button id="range-detail-start-minus-001" class="range-detail-btn">-0.01s</button>
+                                    <button id="range-detail-start-plus-001" class="range-detail-btn">+0.01s</button>
+                                </div>
+                            </div>
+                            <canvas id="range-detail-start" class="range-detail-canvas"></canvas>
+                            <div id="ruler-detail-start" class="time-ruler"></div>
+                        </div>
+                        <div class="range-detail-view">
+                            <div class="range-detail-label">
+                                終了位置
+                                <div class="range-detail-controls">
+                                    <button id="range-detail-end-minus-01" class="range-detail-btn">-0.1s</button>
+                                    <button id="range-detail-end-plus-01" class="range-detail-btn">+0.1s</button>
+                                    <button id="range-detail-end-minus-001" class="range-detail-btn">-0.01s</button>
+                                    <button id="range-detail-end-plus-001" class="range-detail-btn">+0.01s</button>
+                                </div>
+                            </div>
+                            <canvas id="range-detail-end" class="range-detail-canvas"></canvas>
+                            <div id="ruler-detail-end" class="time-ruler"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="track-container">
@@ -132,6 +167,7 @@
     <script src="audioProcessor.js"></script>
     <script src="originalWaveformViewer.js"></script>
     <script src="fadeUIController.js"></script>
+    <script src="rangeDetailController.js"></script>
     <script src="uiController.js"></script>
     <script src="overlapRateController.js"></script>
     <script src="app.js"></script>
