@@ -175,6 +175,16 @@ class LoopMaker {
                 seekTime = Math.max(0, Math.min(loopDuration, seekTime));
                 this.audioPlayer.stopPreview();
                 this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, seekTime, loopDuration);
+                
+                // ミュート状態を再適用
+                if (this.uiController) {
+                    if (this.uiController.track1Muted) {
+                        this.audioPlayer.setTrack1Mute(true);
+                    }
+                    if (this.uiController.track2Muted) {
+                        this.audioPlayer.setTrack2Mute(true);
+                    }
+                }
             }
         }
     }
