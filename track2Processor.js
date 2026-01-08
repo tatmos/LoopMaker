@@ -59,7 +59,7 @@ class Track2Processor {
                         const fadeOutProgress = timeInOutput / waveformDuration;
                         const mode = fadeSettings && fadeSettings.mode ? fadeSettings.mode : 'log';
                         const cp = fadeSettings ? { controlX: fadeSettings.controlX, controlY: fadeSettings.controlY } : null;
-                        const fadeCurve = FadeCurves.evaluate(mode, fadeOutProgress, cp);
+                        const fadeCurve = FadeCurves.evaluate(mode, fadeOutProgress, cp, true); // フェードアウト
                         const fadeFactor = 1.0 - fadeCurve;
                         outputData[i] = inputData[inputIndex] * fadeFactor;
                     } else {
@@ -119,7 +119,7 @@ class Track2Processor {
                         const fadeOutProgress = progressInTail; // 0→1
                         const mode = fadeSettings && fadeSettings.mode ? fadeSettings.mode : 'log';
                         const cp = fadeSettings ? { controlX: fadeSettings.controlX, controlY: fadeSettings.controlY } : null;
-                        const fadeCurve = FadeCurves.evaluate(mode, fadeOutProgress, cp);
+                        const fadeCurve = FadeCurves.evaluate(mode, fadeOutProgress, cp, true); // フェードアウト
                         const fadeFactor = 1.0 - fadeCurve;
                         outputData[i] = inputData[inputIndex] * fadeFactor;
                     } else {

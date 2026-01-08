@@ -24,8 +24,8 @@ class LoopMaker {
         };
         this.fadeSettingsTrack2 = {
             mode: 'log',
-            controlX: 0.25,
-            controlY: 0.9  // フェードアウトは反転（上側に配置）
+            controlX: 0.9,  // フェードアウトのアンカー初期位置（右側：遅くフェードアウト）
+            controlY: 0.9
         };
         
         this.initializeElements();

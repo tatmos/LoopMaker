@@ -54,7 +54,7 @@ class RangeDetailController {
         const timesigDenInput = document.getElementById('timesig-denominator');
         
         if (detailBtn) {
-            detailBtn.addEventListener('click', () => this.show());
+            detailBtn.addEventListener('click', () => this.toggle());
         }
         
         if (closeBtn) {
@@ -295,6 +295,15 @@ class RangeDetailController {
 
     hide() {
         this.container.classList.add('hidden');
+    }
+
+    toggle() {
+        // 現在の表示状態を確認してトグル
+        if (this.container.classList.contains('hidden')) {
+            this.show();
+        } else {
+            this.hide();
+        }
     }
 
     handleMouseDown(e, type) {

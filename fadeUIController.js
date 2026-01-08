@@ -83,48 +83,7 @@ class FadeUIController {
         const handlePointerMove = (clientX, clientY) => {
             if (!this.dragging) return;
             
-            // 元波形用のドラッグ処理
-            if (this.dragging === 'original-track1' || this.dragging === 'original-track2') {
-                if (!this.canvasOriginal || !this.loopMaker.originalBuffer) return;
-                const rect = this.canvasOriginal.getBoundingClientRect();
-                const xPx = clientX - rect.left;
-                const yPx = clientY - rect.top;
-                
-                const useRangeStart = this.loopMaker.useRangeStart;
-                const useRangeEnd = this.loopMaker.useRangeEnd;
-                const overlapRate = this.loopMaker.overlapRate || 0;
-                
-                if (overlapRate <= 0) return;
-                
-                const duration = this.loopMaker.originalBuffer.duration;
-                const useRangeDuration = useRangeEnd - useRangeStart;
-                const overlapDuration = useRangeDuration * (overlapRate / 100);
-                const timeScale = rect.width / duration;
-                const timeAtX = (xPx / rect.width) * duration;
-                
-                let fadeStartTime = 0;
-                let fadeEndTime = 0;
-                
-                if (this.dragging === 'original-track1') {
-                    fadeStartTime = useRangeStart;
-                    fadeEndTime = useRangeStart + overlapDuration;
-                } else {
-                    fadeStartTime = useRangeEnd - overlapDuration;
-                    fadeEndTime = useRangeEnd;
-                }
-                
-                // フェード範囲外の場合は無視
-                if (timeAtX < fadeStartTime || timeAtX > fadeEndTime) return;
-                
-                const fadeDuration = fadeEndTime - fadeStartTime;
-                const timeInFade = timeAtX - fadeStartTime;
-                const nx = timeInFade / fadeDuration;
-                const ny = yPx / rect.height;
-                
-                this.setOriginalControlPoint(this.dragging, nx, ny);
-                return;
-            }
-            
+            // 元波形用のドラッグ処理は無効化（表示のみ）
             // トラック1、2用のドラッグ処理
             const canvas = this.dragging === 'track1' ? this.canvas1 : this.canvas2;
             const rect = canvas.getBoundingClientRect();
@@ -159,11 +118,7 @@ class FadeUIController {
         }
         
         window.addEventListener('mousemove', (e) => {
-            if (this.dragging === 'original-track1' || this.dragging === 'original-track2') {
-                handlePointerMove(e.clientX, e.clientY);
-            } else {
-                handlePointerMove(e.clientX, e.clientY);
-            }
+            handlePointerMove(e.clientX, e.clientY);
         });
         window.addEventListener('mouseup', handlePointerUp);
 
@@ -290,27 +245,25 @@ class FadeUIController {
             return;
         }
         
-        // フェード範囲内の正規化座標を計算
-        const fadeDuration = fadeEndTime - fadeStartTime;
-        const timeInFade = timeAtX - fadeStartTime;
-        const nx = timeInFade / fadeDuration;
-        const ny = yPx / canvas.offsetHeight;
-        
-        // アンカー上かどうかを判定
-        const onAnchor = this.isOnOriginalAnchor(track, xPx, yPx, width, canvas.offsetHeight);
-        
-        if (onAnchor) {
-            this.setOriginalControlPoint(track, nx, ny);
-            this.dragging = track;
-            this.lockScroll();
-            if (e.preventDefault) {
-                e.preventDefault();
-            }
-            if (e.stopPropagation) {
-                e.stopPropagation();
-            }
+        // 元波形上のフェードUIは表示のみで、アンカー操作は無効化
+        // フェード範囲内でも、元波形の範囲操作を実行できるようにする
+        // フェードUIキャンバスを一時的に無効化して元波形キャンバスにイベントを伝播させる
+        if (this.loopMaker.originalWaveformViewer && this.loopMaker.originalWaveformViewer.canvas) {
+            // 元波形キャンバスの座標系に変換
+            const originalRect = this.loopMaker.originalWaveformViewer.canvas.getBoundingClientRect();
+            const originalX = clientX - originalRect.left;
+            const originalY = clientY - originalRect.top;
+            
+            // 元波形キャンバスと同じ位置のイベントを作成
+            const syntheticEvent = {
+                clientX: clientX,
+                clientY: clientY,
+                touches: e.touches || [],
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            };
+            this.loopMaker.originalWaveformViewer.handleMouseDown(syntheticEvent);
         }
-        // フェード範囲内でアンカー上でない場合は、何もしない（元波形の範囲操作は実行されない）
     }
     
     isOnOriginalAnchor(track, xPx, yPx, width, height) {
@@ -450,7 +403,11 @@ class FadeUIController {
         // キャンバス座標（左上0,0）→ フェード値（x 0〜1, y 0〜1 上が1）
         const clampedX = Math.min(0.9, Math.max(0.1, nx));
         const clampedY = Math.min(0.9, Math.max(0.1, ny));
-        const valueY = 1 - clampedY;
+        
+        // フェードイン（track1）: 上にドラッグ→早く立ち上がる（controlYが大きい）
+        // フェードアウト（track2）: 上にドラッグ→早くフェードアウト（controlYが大きい）
+        // どちらも同じ動作にするため、フェードアウトは反転しない
+        const valueY = track === 'track1' ? (1 - clampedY) : clampedY;
 
         if (track === 'track1') {
             this.loopMaker.fadeSettingsTrack1.controlX = clampedX;
@@ -634,9 +591,10 @@ class FadeUIController {
             return;
         }
         
-        // フェードUIキャンバスを有効化
+        // 元波形上のフェードUIは表示のみで、操作は無効化
+        // イベントを元波形キャンバスに通すため、pointer-eventsをnoneにする
         if (this.canvasOriginal) {
-            this.canvasOriginal.style.pointerEvents = 'auto';
+            this.canvasOriginal.style.pointerEvents = 'none';
         }
         
         const duration = this.loopMaker.originalBuffer.duration;
@@ -705,22 +663,8 @@ class FadeUIController {
         }
         ctx.stroke();
         
-        // コントロールポイントを描画（カーブ上の t=0.5 相当位置）
-        const tMid = 0.5;
-        let vMid = FadeCurves.evaluate(mode, tMid, cp);
-        if (!isFadeIn) {
-            vMid = 1 - vMid;
-        }
-        const xMid = fadeStartX + (tMid * fadeWidth);
-        const yMid = (1 - vMid) * height;
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#ff6b6b';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(xMid, yMid, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        // 元波形上のフェードUIは表示のみで、アンカーは非表示
+        // （元波形は範囲指定が主目的のため）
         
         ctx.restore();
     }
