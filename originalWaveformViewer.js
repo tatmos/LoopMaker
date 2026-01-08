@@ -10,6 +10,8 @@ class OriginalWaveformViewer {
         this.isDragging = false;
         this.dragType = null; // 'start' or 'end'
         this.onRangeChange = null; // コールバック関数
+        this.hoverTopArea = false; // 上部30%エリアをホバーしているか
+        this.tailMode = null; // テール時間モード情報 { enabled: boolean, tailTime: number, useRangeEnd: number }
         
         this.setupEventListeners();
     }
@@ -37,7 +39,14 @@ class OriginalWaveformViewer {
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        this.canvas.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+        this.canvas.addEventListener('mouseleave', (e) => {
+            this.handleMouseUp(e);
+            // 範囲外に出たときにホバー状態を解除
+            if (this.hoverTopArea) {
+                this.hoverTopArea = false;
+                this.render();
+            }
+        });
 
         // iOS / タッチ操作対応
         this.canvas.addEventListener('touchstart', (e) => {
@@ -87,9 +96,15 @@ class OriginalWaveformViewer {
         this.render();
     }
 
-    setRange(startTime, endTime) {
+    setRange(startTime, endTime, tailMode = null) {
         this.startTime = startTime;
         this.endTime = endTime;
+        this.tailMode = tailMode; // { enabled: boolean, tailTime: number, useRangeEnd: number }
+        this.render();
+    }
+    
+    setTailMode(tailMode) {
+        this.tailMode = tailMode;
         this.render();
     }
 
@@ -104,18 +119,39 @@ class OriginalWaveformViewer {
         if (!this.audioBuffer) return;
         
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
+        // マウスイベントとタッチイベントの両方に対応
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
         const width = this.canvas.width;
+        const height = this.canvas.height;
         const duration = this.audioBuffer.duration;
         const timeScale = width / duration;
         
         const startX = this.startTime * timeScale;
         const endX = this.endTime * timeScale;
+        const topThreshold = height * 0.3;
+        
+        // 範囲内をクリックした場合
+        if (x >= startX && x <= endX) {
+            // 範囲内の上部（高さの30%）をクリックした場合は全体ドラッグを優先
+            if (y <= topThreshold) {
+                this.isDragging = true;
+                this.dragType = 'move';
+                this.dragOffset = x - startX;
+                this.canvas.style.cursor = 'move';
+                this.lockScroll();
+                return;
+            }
+        }
+        
+        // 上部30%以外の場合のみ、ハンドル判定を行う
         // タッチデバイスでも掴みやすいよう少し広めにする
         const handleWidth = 16;
         
-        // 開始位置のハンドルをクリックしたか
-        if (Math.abs(x - startX) < handleWidth) {
+        // 開始位置のハンドルをクリックしたか（上部30%以外の場合のみ）
+        if (y > topThreshold && Math.abs(x - startX) < handleWidth) {
             this.isDragging = true;
             this.dragType = 'start';
             this.canvas.style.cursor = 'ew-resize';
@@ -123,8 +159,8 @@ class OriginalWaveformViewer {
             return;
         }
         
-        // 終了位置のハンドルをクリックしたか
-        if (Math.abs(x - endX) < handleWidth) {
+        // 終了位置のハンドルをクリックしたか（上部30%以外の場合のみ）
+        if (y > topThreshold && Math.abs(x - endX) < handleWidth) {
             this.isDragging = true;
             this.dragType = 'end';
             this.canvas.style.cursor = 'ew-resize';
@@ -132,8 +168,8 @@ class OriginalWaveformViewer {
             return;
         }
         
-        // 範囲内をクリックした場合は範囲全体を移動
-        if (x >= startX && x <= endX) {
+        // 範囲内の下部をクリックした場合は範囲全体を移動
+        if (x >= startX && x <= endX && y > topThreshold) {
             this.isDragging = true;
             this.dragType = 'move';
             this.dragOffset = x - startX;
@@ -147,8 +183,13 @@ class OriginalWaveformViewer {
         if (!this.audioBuffer) return;
         
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
+        // マウスイベントとタッチイベントの両方に対応
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
         const width = this.canvas.width;
+        const height = this.canvas.height;
         const duration = this.audioBuffer.duration;
         const timeScale = width / duration;
         
@@ -177,13 +218,37 @@ class OriginalWaveformViewer {
             const startX = this.startTime * timeScale;
             const endX = this.endTime * timeScale;
             const handleWidth = 16;
+            const topThreshold = height * 0.3;
             
-            if (Math.abs(x - startX) < handleWidth || Math.abs(x - endX) < handleWidth) {
-                this.canvas.style.cursor = 'ew-resize';
-            } else if (x >= startX && x <= endX) {
-                this.canvas.style.cursor = 'move';
+            // 上部30%エリアのホバー状態を更新
+            const wasHoveringTop = this.hoverTopArea;
+            const isHoveringTop = (x >= startX && x <= endX && y <= topThreshold);
+            this.hoverTopArea = isHoveringTop;
+            
+            // ホバー状態が変わったら再描画
+            if (wasHoveringTop !== isHoveringTop) {
+                this.render();
+            }
+            
+            if (x >= startX && x <= endX) {
+                // 範囲内の上部は全体ドラッグカーソル、下部は移動カーソル
+                if (y <= topThreshold) {
+                    this.canvas.style.cursor = 'move';
+                } else {
+                    // 下部でハンドルの近くの場合
+                    if (Math.abs(x - startX) < handleWidth || Math.abs(x - endX) < handleWidth) {
+                        this.canvas.style.cursor = 'ew-resize';
+                    } else {
+                        this.canvas.style.cursor = 'move';
+                    }
+                }
             } else {
-                this.canvas.style.cursor = 'default';
+                // 範囲外でハンドルの近くの場合
+                if (y > topThreshold && (Math.abs(x - startX) < handleWidth || Math.abs(x - endX) < handleWidth)) {
+                    this.canvas.style.cursor = 'ew-resize';
+                } else {
+                    this.canvas.style.cursor = 'default';
+                }
             }
         }
     }
@@ -317,11 +382,42 @@ class OriginalWaveformViewer {
         // 範囲指定UIを描画
         this.drawRangeUI(ctx, startX, endX, height, timeScale);
         
+        // テール時間モードの時に、トラック2が利用する波形分（利用範囲の右側）のエンド位置に緑の線を描画
+        if (this.tailMode && this.tailMode.enabled && this.tailMode.tailTime > 0) {
+            const track2EndTime = this.tailMode.useRangeEnd + this.tailMode.tailTime;
+            if (track2EndTime >= 0 && track2EndTime <= duration) {
+                const track2EndX = track2EndTime * timeScale;
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(track2EndX, 0);
+                ctx.lineTo(track2EndX, height);
+                ctx.stroke();
+                
+                // ラベル
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '12px sans-serif';
+                ctx.fillText('Track2 End', track2EndX + 5, 30);
+            }
+        }
+        
         // タイムルーラーを描画
         this.drawTimeRuler(duration, width);
     }
 
     drawRangeUI(ctx, startX, endX, height, timeScale) {
+        const topThreshold = height * 0.3;
+        
+        // 範囲内のハイライト
+        ctx.fillStyle = 'rgba(255, 107, 107, 0.1)';
+        ctx.fillRect(startX, 0, endX - startX, height);
+        
+        // 上部30%エリアをホバーしている場合は追加のハイライト
+        if (this.hoverTopArea) {
+            ctx.fillStyle = 'rgba(255, 107, 107, 0.2)';
+            ctx.fillRect(startX, 0, endX - startX, topThreshold);
+        }
+        
         // 範囲の境界線
         ctx.strokeStyle = '#ff6b6b';
         ctx.lineWidth = 2;
@@ -332,16 +428,23 @@ class OriginalWaveformViewer {
         ctx.lineTo(endX, height);
         ctx.stroke();
         
-        // 開始位置のハンドル
-        ctx.fillStyle = '#ff6b6b';
-        ctx.fillRect(startX - 4, 0, 8, height);
+        // 開始位置のハンドル（上部30%の場合は描画しない、または薄く）
+        if (!this.hoverTopArea) {
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillRect(startX - 4, 0, 8, height);
+        } else {
+            ctx.fillStyle = 'rgba(255, 107, 107, 0.5)';
+            ctx.fillRect(startX - 4, topThreshold, 8, height - topThreshold);
+        }
         
-        // 終了位置のハンドル
-        ctx.fillRect(endX - 4, 0, 8, height);
-        
-        // 範囲内のハイライト
-        ctx.fillStyle = 'rgba(255, 107, 107, 0.1)';
-        ctx.fillRect(startX, 0, endX - startX, height);
+        // 終了位置のハンドル（上部30%の場合は描画しない、または薄く）
+        if (!this.hoverTopArea) {
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillRect(endX - 4, 0, 8, height);
+        } else {
+            ctx.fillStyle = 'rgba(255, 107, 107, 0.5)';
+            ctx.fillRect(endX - 4, topThreshold, 8, height - topThreshold);
+        }
         
         // ラベル
         ctx.fillStyle = '#ff6b6b';

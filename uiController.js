@@ -157,8 +157,23 @@ class UIController {
             const arrayBuffer = await file.arrayBuffer();
             this.loopMaker.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             this.loopMaker.originalBuffer = await this.loopMaker.audioContext.decodeAudioData(arrayBuffer);
+            
+            // アルゴリズムUIを初期化
+            if (this.loopMaker.updateAlgorithmUI) {
+                this.loopMaker.updateAlgorithmUI();
+            }
+            
+            // テール時間の最大値を設定（テール時間モードの場合）
+            if (this.loopMaker.tailTimeController && this.loopMaker.originalBuffer && this.loopMaker.loopAlgorithm === 'tail') {
+                this.loopMaker.tailTimeController.updateMaxValueForTailMode();
+            }
             this.loopMaker.audioProcessor = new AudioProcessor(this.loopMaker.audioContext);
             this.loopMaker.audioPlayer = new AudioPlayer(this.loopMaker.audioContext);
+            
+            // アルゴリズムを初期化（audioProcessorが作成された後）
+            if (this.loopMaker.initAlgorithm) {
+                this.loopMaker.initAlgorithm();
+            }
             
             // 元波形を表示
             if (this.loopMaker.originalWaveformViewer) {
@@ -211,8 +226,12 @@ class UIController {
             this.playBtn.disabled = true;
             this.stopBtn.disabled = false;
 
+            // テールモードの場合は利用範囲の長さをループ長として使用
+            const useRangeDuration = this.loopMaker.useRangeEnd - this.loopMaker.useRangeStart;
+            const loopDuration = this.loopMaker.loopAlgorithm === 'tail' ? useRangeDuration : null;
+
             // トラック1と2の加工後のバッファを再生
-            const started = this.loopMaker.audioPlayer.playPreviewWithBuffers(this.loopMaker.track1Buffer, this.loopMaker.track2Buffer);
+            const started = this.loopMaker.audioPlayer.playPreviewWithBuffers(this.loopMaker.track1Buffer, this.loopMaker.track2Buffer, 0, loopDuration);
             if (!started) {
                 // 既に再生中などで開始できなかった場合はボタン状態を元に戻す
                 this.playBtn.disabled = false;
@@ -319,8 +338,15 @@ class UIController {
         if (this.filenameInput) {
             this.filenameInput.disabled = false;
         }
+        const algorithmSelect = document.getElementById('loop-algorithm');
+        if (algorithmSelect) {
+            algorithmSelect.disabled = false;
+        }
         if (this.loopMaker.overlapRateController) {
             this.loopMaker.overlapRateController.enable();
+        }
+        if (this.loopMaker.tailTimeController) {
+            this.loopMaker.tailTimeController.enable();
         }
         const rangeDetailBtn = document.getElementById('range-detail-btn');
         if (rangeDetailBtn) {

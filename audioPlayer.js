@@ -22,12 +22,15 @@ class AudioPlayer {
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
     // offsetSeconds: 再生開始位置（秒）
-    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0) {
+    // loopDuration: ループ期間（秒）。指定されない場合はtrack1Buffer.durationを使用
+    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0, loopDuration = null) {
         if (!track1Buffer || !track2Buffer || this.isPlaying) return false;
 
         try {
-            // トラック1の加工後のバッファの長さをループ期間として使用
-            const loopDuration = track1Buffer.duration;
+            // ループ期間が指定されていない場合は、トラック1の加工後のバッファの長さを使用
+            if (loopDuration === null || loopDuration === undefined) {
+                loopDuration = track1Buffer.duration;
+            }
 
             // オフセットをループ長の範囲に収める
             let offset = offsetSeconds % loopDuration;

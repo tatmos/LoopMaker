@@ -114,5 +114,50 @@ class Track1Processor {
 
         return newBuffer;
     }
+
+    // テール時間モード: 利用範囲 + テール時間分のバッファを作成
+    // 利用範囲部分にフェードインを適用し、テール部分は無音
+    // fadeSettings: { mode: 'linear'|'log'|'exp'|'custom', controlX:number, controlY:number }
+    createTailTimeBuffer(audioBuffer, tailTime, fadeSettings = null) {
+        const sampleRate = audioBuffer.sampleRate;
+        const waveformDuration = audioBuffer.duration; // 利用範囲の長さ
+        const numChannels = audioBuffer.numberOfChannels;
+        
+        // バッファ長 = 利用範囲 + テール時間
+        const totalDuration = waveformDuration + tailTime;
+        const totalFrameCount = Math.floor(totalDuration * sampleRate);
+        const newBuffer = this.audioContext.createBuffer(numChannels, totalFrameCount, sampleRate);
+
+        // フェードインの長さはテール時間
+        const fadeInDuration = Math.min(tailTime, waveformDuration);
+        const fadeInFrameCount = Math.floor(fadeInDuration * sampleRate);
+        
+        // 利用範囲の終了位置
+        const waveformFrameCount = Math.floor(waveformDuration * sampleRate);
+
+        for (let channel = 0; channel < numChannels; channel++) {
+            const inputData = audioBuffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+
+            for (let i = 0; i < totalFrameCount; i++) {
+                if (i < waveformFrameCount && i < inputData.length) {
+                    // 利用範囲内: フェードインを適用
+                    let fadeFactor = 1.0;
+                    if (i < fadeInFrameCount && fadeInFrameCount > 0) {
+                        const t = i / fadeInFrameCount;
+                        const mode = fadeSettings && fadeSettings.mode ? fadeSettings.mode : 'log';
+                        const cp = fadeSettings ? { controlX: fadeSettings.controlX, controlY: fadeSettings.controlY } : null;
+                        fadeFactor = FadeCurves.evaluate(mode, t, cp);
+                    }
+                    outputData[i] = inputData[i] * fadeFactor;
+                } else {
+                    // テール部分（利用範囲外）: 無音
+                    outputData[i] = 0;
+                }
+            }
+        }
+
+        return newBuffer;
+    }
 }
 

@@ -9,7 +9,7 @@ class WaveformRenderer {
         this.ruler2 = ruler2;
     }
 
-    render(track1Buffer, track2Buffer, currentPlaybackTime = null, bpmOptions = null) {
+    render(track1Buffer, track2Buffer, currentPlaybackTime = null, bpmOptions = null, renderOptions = null) {
         if (!track1Buffer || !track2Buffer) return;
 
         const width = this.canvas1.width = this.canvas1.offsetWidth;
@@ -21,7 +21,7 @@ class WaveformRenderer {
         const track1Duration = track1Buffer.duration;
 
         // トラック1: 加工後のバッファを表示
-        this.drawTrack1(track1Buffer, track1Duration, width, height, bpmOptions);
+        this.drawTrack1(track1Buffer, track1Duration, width, height, bpmOptions, renderOptions);
         
         // トラック2: 加工後のバッファを表示
         this.drawTrack2(track2Buffer, track1Duration, width, height, bpmOptions);
@@ -60,7 +60,7 @@ class WaveformRenderer {
         ctx2.stroke();
     }
 
-    drawTrack1(track1Buffer, totalDuration, width, height, bpmOptions) {
+    drawTrack1(track1Buffer, totalDuration, width, height, bpmOptions, renderOptions = null) {
         const ctx = this.ctx1;
         ctx.clearRect(0, 0, width, height);
         
@@ -71,6 +71,12 @@ class WaveformRenderer {
         const waveformEndTime = track1Buffer.duration;
         const displayStartTime = 0;
         const displayEndTime = totalDuration;
+
+        // テール時間モードの場合、利用範囲の長さを取得
+        let useRangeDuration = null;
+        if (renderOptions && renderOptions.loopAlgorithm === 'tail') {
+            useRangeDuration = renderOptions.useRangeDuration || null;
+        }
 
         WaveformDrawer.drawWaveform(
             track1Buffer,
@@ -89,6 +95,24 @@ class WaveformRenderer {
                 backgroundColor: '#e0e0e0'
             }
         );
+
+        // テール時間モードの場合、テール部分をグレーアウト表示
+        if (renderOptions && renderOptions.loopAlgorithm === 'tail' && useRangeDuration && useRangeDuration < totalDuration) {
+            const tailStartX = (useRangeDuration / totalDuration) * width;
+            const tailWidth = width - tailStartX;
+            
+            // グレーアウトオーバーレイ
+            ctx.fillStyle = 'rgba(128, 128, 128, 0.4)';
+            ctx.fillRect(tailStartX, 0, tailWidth, height);
+            
+            // 境界線
+            ctx.strokeStyle = 'rgba(128, 128, 128, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(tailStartX, 0);
+            ctx.lineTo(tailStartX, height);
+            ctx.stroke();
+        }
 
         // BPMライン（BPM指定が有効な場合）
         this.drawBpmLines(ctx, totalDuration, width, height, bpmOptions);

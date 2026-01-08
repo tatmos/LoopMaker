@@ -436,11 +436,44 @@ header h1 {
     overflow: hidden;
 }
 
+.tail-time-ruler {
+    margin-top: 8px;
+    height: 24px;
+}
+
 .loop-controls {
     background: #f8f9fa;
     padding: 20px;
     border-radius: 12px;
     margin-bottom: 20px;
+}
+
+.algorithm-select {
+    padding: 8px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.algorithm-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.algorithm-select:disabled {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+}
+
+.algorithm-ui {
+    margin-top: 15px;
+}
+
+.algorithm-ui.hidden {
+    display: none;
 }
 
 .loop-info {

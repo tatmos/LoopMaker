@@ -343,10 +343,21 @@ class RangeDetailController {
         // 新しい時間を計算
         const newTime = viewStart + (x / timeScale);
         
-        // 範囲制限
-        const minTime = 0;
-        const maxTime = this.audioBuffer.duration;
-        const clampedTime = Math.max(minTime, Math.min(maxTime, newTime));
+        // 範囲制限と開始位置/終了位置の逆転防止
+        const minInterval = 0.01; // 最小間隔（秒）
+        let clampedTime;
+        
+        if (type === 'start') {
+            // 開始位置: 0以上、終了位置 - 最小間隔以下
+            const minTime = 0;
+            const maxTime = this.endTime - minInterval;
+            clampedTime = Math.max(minTime, Math.min(maxTime, newTime));
+        } else {
+            // 終了位置: 開始位置 + 最小間隔以上、波形の長さ以下
+            const minTime = this.startTime + minInterval;
+            const maxTime = this.audioBuffer.duration;
+            clampedTime = Math.max(minTime, Math.min(maxTime, newTime));
+        }
         
         // 開始位置と終了位置が逆転しないように制限
         if (type === 'start') {
@@ -511,7 +522,13 @@ class RangeDetailController {
     }
 
     applyClampedStartTime(time) {
-        this.startTime = time;
+        // 開始位置が終了位置を超えないように制限
+        const minInterval = 0.01; // 最小間隔（秒）
+        const minTime = 0;
+        const maxTime = this.endTime - minInterval;
+        const clampedTime = Math.max(minTime, Math.min(maxTime, time));
+        
+        this.startTime = clampedTime;
         // 元のビューアーに反映
         if (this.originalWaveformViewer) {
             this.originalWaveformViewer.setRange(this.startTime, this.endTime);
@@ -523,7 +540,13 @@ class RangeDetailController {
     }
 
     applyClampedEndTime(time) {
-        this.endTime = time;
+        // 終了位置が開始位置を超えないように制限
+        const minInterval = 0.01; // 最小間隔（秒）
+        const minTime = this.startTime + minInterval;
+        const maxTime = this.audioBuffer ? this.audioBuffer.duration : time;
+        const clampedTime = Math.max(minTime, Math.min(maxTime, time));
+        
+        this.endTime = clampedTime;
         // 元のビューアーに反映
         if (this.originalWaveformViewer) {
             this.originalWaveformViewer.setRange(this.startTime, this.endTime);

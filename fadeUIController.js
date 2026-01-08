@@ -4,16 +4,19 @@ class FadeUIController {
      * @param {LoopMaker} loopMaker
      * @param {HTMLCanvasElement} canvas1 - トラック1用フェードUIキャンバス
      * @param {HTMLCanvasElement} canvas2 - トラック2用フェードUIキャンバス
+     * @param {HTMLCanvasElement} canvasOriginal - 元波形用フェードUIキャンバス
      */
-    constructor(loopMaker, canvas1, canvas2) {
+    constructor(loopMaker, canvas1, canvas2, canvasOriginal) {
         this.loopMaker = loopMaker;
         this.canvas1 = canvas1;
         this.canvas2 = canvas2;
+        this.canvasOriginal = canvasOriginal;
         this.ctx1 = canvas1.getContext('2d');
         this.ctx2 = canvas2.getContext('2d');
+        this.ctxOriginal = canvasOriginal ? canvasOriginal.getContext('2d') : null;
 
         // ドラッグ状態
-        this.dragging = null; // 'track1' | 'track2' | null
+        this.dragging = null; // 'track1' | 'track2' | 'original-track1' | 'original-track2' | null
 
         this.setupEventListeners();
         this.updateCanvasSize();
@@ -48,20 +51,21 @@ class FadeUIController {
             const rect = canvas.getBoundingClientRect();
             const xPx = clientX - rect.left;
             const yPx = clientY - rect.top;
-            const xNorm = xPx / rect.width;
-            const yNorm = yPx / rect.height;
 
             // アンカー上かどうかを判定
             const onAnchor = this.isOnAnchor(track, xPx, yPx);
 
             if (onAnchor) {
                 // フェードコントローラとして動作（アンカーのみドラッグ可能）
-                this.setControlPoint(track, xNorm, yNorm);
-                this.dragging = track;
-                this.lockScroll();
-                if (e) {
-                    e.stopPropagation();
-                    e.preventDefault();
+                const { nx, ny } = this.getNormalizedCoordinates(track, xPx, yPx, rect.width, rect.height);
+                if (nx !== null && ny !== null) {
+                    this.setControlPoint(track, nx, ny);
+                    this.dragging = track;
+                    this.lockScroll();
+                    if (e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }
                 }
             } else {
                 // アンカー以外は波形クリックとして扱い、再生位置移動
@@ -78,12 +82,60 @@ class FadeUIController {
 
         const handlePointerMove = (clientX, clientY) => {
             if (!this.dragging) return;
+            
+            // 元波形用のドラッグ処理
+            if (this.dragging === 'original-track1' || this.dragging === 'original-track2') {
+                if (!this.canvasOriginal || !this.loopMaker.originalBuffer) return;
+                const rect = this.canvasOriginal.getBoundingClientRect();
+                const xPx = clientX - rect.left;
+                const yPx = clientY - rect.top;
+                
+                const useRangeStart = this.loopMaker.useRangeStart;
+                const useRangeEnd = this.loopMaker.useRangeEnd;
+                const overlapRate = this.loopMaker.overlapRate || 0;
+                
+                if (overlapRate <= 0) return;
+                
+                const duration = this.loopMaker.originalBuffer.duration;
+                const useRangeDuration = useRangeEnd - useRangeStart;
+                const overlapDuration = useRangeDuration * (overlapRate / 100);
+                const timeScale = rect.width / duration;
+                const timeAtX = (xPx / rect.width) * duration;
+                
+                let fadeStartTime = 0;
+                let fadeEndTime = 0;
+                
+                if (this.dragging === 'original-track1') {
+                    fadeStartTime = useRangeStart;
+                    fadeEndTime = useRangeStart + overlapDuration;
+                } else {
+                    fadeStartTime = useRangeEnd - overlapDuration;
+                    fadeEndTime = useRangeEnd;
+                }
+                
+                // フェード範囲外の場合は無視
+                if (timeAtX < fadeStartTime || timeAtX > fadeEndTime) return;
+                
+                const fadeDuration = fadeEndTime - fadeStartTime;
+                const timeInFade = timeAtX - fadeStartTime;
+                const nx = timeInFade / fadeDuration;
+                const ny = yPx / rect.height;
+                
+                this.setOriginalControlPoint(this.dragging, nx, ny);
+                return;
+            }
+            
+            // トラック1、2用のドラッグ処理
             const canvas = this.dragging === 'track1' ? this.canvas1 : this.canvas2;
             const rect = canvas.getBoundingClientRect();
-            const x = (clientX - rect.left) / rect.width;
-            const y = (clientY - rect.top) / rect.height;
-
-            this.setControlPoint(this.dragging, x, y);
+            const xPx = clientX - rect.left;
+            const yPx = clientY - rect.top;
+            
+            // フェード範囲内の正規化座標を計算
+            const { nx, ny } = this.getNormalizedCoordinates(this.dragging, xPx, yPx, rect.width, rect.height);
+            if (nx !== null && ny !== null) {
+                this.setControlPoint(this.dragging, nx, ny);
+            }
         };
 
         const handlePointerUp = () => {
@@ -96,7 +148,23 @@ class FadeUIController {
         // マウス
         this.canvas1.addEventListener('mousedown', (e) => handlePointerDown('track1', e.clientX, e.clientY, e));
         this.canvas2.addEventListener('mousedown', (e) => handlePointerDown('track2', e.clientX, e.clientY, e));
-        window.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
+        
+        // 元波形用のマウスイベント（オーバーラップ率モードの時のみ）
+        if (this.canvasOriginal) {
+            this.canvasOriginal.addEventListener('mousemove', (e) => {
+                if (this.dragging === 'original-track1' || this.dragging === 'original-track2') {
+                    handlePointerMove(e.clientX, e.clientY);
+                }
+            });
+        }
+        
+        window.addEventListener('mousemove', (e) => {
+            if (this.dragging === 'original-track1' || this.dragging === 'original-track2') {
+                handlePointerMove(e.clientX, e.clientY);
+            } else {
+                handlePointerMove(e.clientX, e.clientY);
+            }
+        });
         window.addEventListener('mouseup', handlePointerUp);
 
         // タッチ（iOS対応）
@@ -132,16 +200,247 @@ class FadeUIController {
 
         this.canvas1.addEventListener('touchstart', (e) => onTouchStart('track1', e), { passive: false });
         this.canvas2.addEventListener('touchstart', (e) => onTouchStart('track2', e), { passive: false });
+        
+        // 元波形用のイベントリスナー（オーバーラップ率モードの時のみ有効）
+        if (this.canvasOriginal) {
+            this.canvasOriginal.addEventListener('mousedown', (e) => this.handleOriginalPointerDown(e));
+            this.canvasOriginal.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                if (!touch) return;
+                const wasDragging = this.dragging !== null;
+                this.handleOriginalPointerDown(touch);
+                if (this.dragging !== null && !wasDragging) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
+        
         window.addEventListener('touchmove', onTouchMove, { passive: false });
         window.addEventListener('touchend', onTouchEnd);
         window.addEventListener('touchcancel', onTouchCancel);
     }
+    
+    handleOriginalPointerDown(e) {
+        if (this.loopMaker.loopAlgorithm !== 'overlap') return;
+        if (!this.loopMaker.originalBuffer) return;
+        
+        const canvas = this.canvasOriginal;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const xPx = clientX - rect.left;
+        const yPx = clientY - rect.top;
+        
+        // 元波形の時間座標を計算
+        const width = canvas.offsetWidth;
+        const duration = this.loopMaker.originalBuffer.duration;
+        const timeAtX = (xPx / width) * duration;
+        
+        const useRangeStart = this.loopMaker.useRangeStart;
+        const useRangeEnd = this.loopMaker.useRangeEnd;
+        const overlapRate = this.loopMaker.overlapRate || 0;
+        
+        if (overlapRate <= 0) return;
+        
+        const useRangeDuration = useRangeEnd - useRangeStart;
+        const overlapDuration = useRangeDuration * (overlapRate / 100);
+        
+        // トラック1のフェードイン範囲: 開始位置から、オーバーラップ率の長さまで
+        const track1FadeStart = useRangeStart;
+        const track1FadeEnd = useRangeStart + overlapDuration;
+        
+        // トラック2のフェードアウト範囲: 終了位置からオーバーラップ率の長さを引いた位置から、終了位置まで
+        const track2FadeStart = useRangeEnd - overlapDuration;
+        const track2FadeEnd = useRangeEnd;
+        
+        // どの範囲内にクリックされたか判定
+        let track = null;
+        let fadeStartTime = 0;
+        let fadeEndTime = 0;
+        
+        if (timeAtX >= track1FadeStart && timeAtX <= track1FadeEnd) {
+            track = 'original-track1';
+            fadeStartTime = track1FadeStart;
+            fadeEndTime = track1FadeEnd;
+        } else if (timeAtX >= track2FadeStart && timeAtX <= track2FadeEnd) {
+            track = 'original-track2';
+            fadeStartTime = track2FadeStart;
+            fadeEndTime = track2FadeEnd;
+        }
+        
+        if (!track) {
+            // フェード範囲外の場合は、元波形の範囲操作を実行できるようにする
+            // フェードUIキャンバスを一時的に無効化して元波形キャンバスにイベントを伝播させる
+            if (this.loopMaker.originalWaveformViewer && this.loopMaker.originalWaveformViewer.canvas) {
+                // 元波形キャンバスの座標系に変換
+                const originalRect = this.loopMaker.originalWaveformViewer.canvas.getBoundingClientRect();
+                const originalX = clientX - originalRect.left;
+                const originalY = clientY - originalRect.top;
+                
+                // 元波形キャンバスと同じ位置のイベントを作成
+                const syntheticEvent = {
+                    clientX: clientX,
+                    clientY: clientY,
+                    touches: e.touches || [],
+                    preventDefault: () => {},
+                    stopPropagation: () => {}
+                };
+                this.loopMaker.originalWaveformViewer.handleMouseDown(syntheticEvent);
+            }
+            return;
+        }
+        
+        // フェード範囲内の正規化座標を計算
+        const fadeDuration = fadeEndTime - fadeStartTime;
+        const timeInFade = timeAtX - fadeStartTime;
+        const nx = timeInFade / fadeDuration;
+        const ny = yPx / canvas.offsetHeight;
+        
+        // アンカー上かどうかを判定
+        const onAnchor = this.isOnOriginalAnchor(track, xPx, yPx, width, canvas.offsetHeight);
+        
+        if (onAnchor) {
+            this.setOriginalControlPoint(track, nx, ny);
+            this.dragging = track;
+            this.lockScroll();
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+        }
+        // フェード範囲内でアンカー上でない場合は、何もしない（元波形の範囲操作は実行されない）
+    }
+    
+    isOnOriginalAnchor(track, xPx, yPx, width, height) {
+        if (this.loopMaker.loopAlgorithm !== 'overlap') return false;
+        if (!this.loopMaker.originalBuffer) return false;
+        
+        const settings = track === 'original-track1'
+            ? this.loopMaker.fadeSettingsTrack1
+            : this.loopMaker.fadeSettingsTrack2;
+        
+        if (!settings) return false;
+        
+        const useRangeStart = this.loopMaker.useRangeStart;
+        const useRangeEnd = this.loopMaker.useRangeEnd;
+        const overlapRate = this.loopMaker.overlapRate || 0;
+        
+        if (overlapRate <= 0) return false;
+        
+        const duration = this.loopMaker.originalBuffer.duration;
+        const useRangeDuration = useRangeEnd - useRangeStart;
+        const overlapDuration = useRangeDuration * (overlapRate / 100);
+        const timeScale = width / duration;
+        
+        let fadeStartTime = 0;
+        let fadeEndTime = 0;
+        
+        if (track === 'original-track1') {
+            fadeStartTime = useRangeStart;
+            fadeEndTime = useRangeStart + overlapDuration;
+        } else {
+            fadeStartTime = useRangeEnd - overlapDuration;
+            fadeEndTime = useRangeEnd;
+        }
+        
+        const fadeStartX = fadeStartTime * timeScale;
+        const fadeEndX = fadeEndTime * timeScale;
+        const fadeWidth = fadeEndX - fadeStartX;
+        
+        if (fadeWidth <= 0) return false;
+        
+        const mode = settings.mode;
+        const cp = { controlX: settings.controlX, controlY: settings.controlY };
+        
+        // アンカー位置（t=0.5 のカーブ上）
+        const tMid = 0.5;
+        let vMid = FadeCurves.evaluate(mode, tMid, cp);
+        if (track === 'original-track2') {
+            // トラック2はフェードアウト表示なので反転
+            vMid = 1 - vMid;
+        }
+        const xMid = fadeStartX + (tMid * fadeWidth);
+        const yMid = (1 - vMid) * height;
+        
+        const dx = xPx - xMid;
+        const dy = yPx - yMid;
+        const distSq = dx * dx + dy * dy;
+        const radius = 18; // ピクセル
+        return distSq <= radius * radius;
+    }
+    
+    setOriginalControlPoint(track, nx, ny) {
+        // キャンバス座標（左上0,0）→ フェード値（x 0〜1, y 0〜1 上が1）
+        const clampedX = Math.min(0.9, Math.max(0.1, nx));
+        const clampedY = Math.min(0.9, Math.max(0.1, ny));
+        const valueY = 1 - clampedY;
+        
+        if (track === 'original-track1') {
+            this.loopMaker.fadeSettingsTrack1.controlX = clampedX;
+            this.loopMaker.fadeSettingsTrack1.controlY = valueY;
+            this.loopMaker.fadeSettingsTrack1.mode = 'custom';
+        } else {
+            this.loopMaker.fadeSettingsTrack2.controlX = clampedX;
+            this.loopMaker.fadeSettingsTrack2.controlY = valueY;
+            this.loopMaker.fadeSettingsTrack2.mode = 'custom';
+        }
+        
+        // バッファを再生成して再描画
+        this.loopMaker.updateBuffers();
+        this.loopMaker.drawWaveforms();
+        this.render();
+    }
 
     updateCanvasSize() {
         [this.canvas1, this.canvas2].forEach((canvas) => {
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
+            if (canvas) {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            }
         });
+        if (this.canvasOriginal) {
+            this.canvasOriginal.width = this.canvasOriginal.offsetWidth;
+            this.canvasOriginal.height = this.canvasOriginal.offsetHeight;
+        }
+    }
+
+    /**
+     * キャンバス座標からフェード範囲内の正規化座標を取得
+     */
+    getNormalizedCoordinates(track, xPx, yPx, width, height) {
+        let fadeWidth = 0;
+        let fadeStartX = 0;
+        
+        // アルゴリズムクラスからフェード範囲情報を取得
+        if (!this.loopMaker.currentAlgorithm || !this.loopMaker.track1Buffer || !this.loopMaker.track2Buffer) {
+            return { nx: null, ny: null };
+        }
+
+        const trackDuration = track === 'track1' ? this.loopMaker.track1Buffer.duration : this.loopMaker.track2Buffer.duration;
+        const useRangeDuration = this.loopMaker.useRangeEnd - this.loopMaker.useRangeStart;
+        const params = this.loopMaker.loopAlgorithm === 'overlap' 
+            ? { overlapRate: this.loopMaker.overlapRate }
+            : { tailTime: this.loopMaker.tailTime, useRangeDuration: useRangeDuration };
+        
+        const fadeInfo = this.loopMaker.currentAlgorithm.getFadeRangeInfo(track, params, trackDuration);
+        
+        if (fadeInfo.fadeWidth <= 0) return { nx: null, ny: null };
+        
+        fadeWidth = width * fadeInfo.fadeWidth;
+        fadeStartX = fadeInfo.fadeStartX * width;
+        
+        // フェード範囲外の場合はnullを返す
+        if (xPx < fadeStartX || xPx > fadeStartX + fadeWidth) {
+            return { nx: null, ny: null };
+        }
+        
+        // フェード範囲内の正規化座標（x: 0〜1, y: 0〜1）
+        const nx = (xPx - fadeStartX) / fadeWidth;
+        const ny = yPx / height;
+        
+        return { nx, ny };
     }
 
     /**
@@ -174,6 +473,18 @@ class FadeUIController {
     render() {
         this.drawTrackFade(this.ctx1, this.canvas1, 'track1', true);
         this.drawTrackFade(this.ctx2, this.canvas2, 'track2', false);
+        // オーバーラップ率モードの時のみ元波形にフェードUIを表示
+        if (this.loopMaker.loopAlgorithm === 'overlap' && this.canvasOriginal && this.ctxOriginal) {
+            this.drawOriginalFade();
+            // オーバーラップ率が0の場合は、フェードUIキャンバスを無効化して元波形の範囲操作を有効にする
+            if (this.loopMaker.overlapRate === 0) {
+                this.canvasOriginal.style.pointerEvents = 'none';
+            }
+        } else if (this.canvasOriginal && this.ctxOriginal) {
+            // テール時間モードの時は非表示
+            this.ctxOriginal.clearRect(0, 0, this.canvasOriginal.width, this.canvasOriginal.height);
+            this.canvasOriginal.style.pointerEvents = 'none';
+        }
     }
 
     /**
@@ -190,12 +501,23 @@ class FadeUIController {
 
         if (!settings) return false;
 
-        // フェード幅（トラック長に対するフェード区間）
-        const r = this.loopMaker.overlapRate || 0;
-        if (r <= 0) return false;
-        const fadeWidthRatio = r / (100 - r);
-        const fadeWidth = width * Math.min(1, Math.max(0, fadeWidthRatio));
-        if (fadeWidth <= 0) return false;
+        // アルゴリズムクラスからフェード範囲情報を取得
+        if (!this.loopMaker.currentAlgorithm || !this.loopMaker.track1Buffer || !this.loopMaker.track2Buffer) {
+            return false;
+        }
+
+        const trackDuration = track === 'track1' ? this.loopMaker.track1Buffer.duration : this.loopMaker.track2Buffer.duration;
+        const useRangeDuration = this.loopMaker.useRangeEnd - this.loopMaker.useRangeStart;
+        const params = this.loopMaker.loopAlgorithm === 'overlap' 
+            ? { overlapRate: this.loopMaker.overlapRate }
+            : { tailTime: this.loopMaker.tailTime, useRangeDuration: useRangeDuration };
+        
+        const fadeInfo = this.loopMaker.currentAlgorithm.getFadeRangeInfo(track, params, trackDuration);
+        
+        if (fadeInfo.fadeWidth <= 0) return false;
+        
+        const fadeWidth = width * fadeInfo.fadeWidth;
+        const anchorX = fadeInfo.fadeStartX * width + (0.5 * fadeWidth);
 
         const mode = settings.mode;
         const cp = { controlX: settings.controlX, controlY: settings.controlY };
@@ -207,7 +529,7 @@ class FadeUIController {
             // トラック2はフェードアウト表示なので反転
             vMid = 1 - vMid;
         }
-        const xMid = tMid * fadeWidth;
+        const xMid = anchorX;
         const yMid = (1 - vMid) * height;
 
         const dx = xPx - xMid;
@@ -229,14 +551,23 @@ class FadeUIController {
 
         if (!settings) return;
 
-        // フェードUIの表示幅をフェード範囲のみに限定
-        // オーバーラップ率 r(0〜50) のとき、フェード時間は元長の r% 、
-        // トラック長は (100 - r)% → フェード長/トラック長 = r / (100 - r)
-        const r = this.loopMaker.overlapRate || 0;
-        if (r <= 0) return;
-        const fadeWidthRatio = r / (100 - r);
-        const fadeWidth = width * Math.min(1, Math.max(0, fadeWidthRatio));
-        if (fadeWidth <= 0) return;
+        // アルゴリズムクラスからフェード範囲情報を取得
+        if (!this.loopMaker.currentAlgorithm || !this.loopMaker.track1Buffer || !this.loopMaker.track2Buffer) {
+            return;
+        }
+
+        const trackDuration = track === 'track1' ? this.loopMaker.track1Buffer.duration : this.loopMaker.track2Buffer.duration;
+        const useRangeDuration = this.loopMaker.useRangeEnd - this.loopMaker.useRangeStart;
+        const params = this.loopMaker.loopAlgorithm === 'overlap' 
+            ? { overlapRate: this.loopMaker.overlapRate }
+            : { tailTime: this.loopMaker.tailTime, useRangeDuration: useRangeDuration };
+        
+        const fadeInfo = this.loopMaker.currentAlgorithm.getFadeRangeInfo(track, params, trackDuration);
+        
+        if (fadeInfo.fadeWidth <= 0) return;
+        
+        const fadeWidth = width * fadeInfo.fadeWidth;
+        const fadeStartX = fadeInfo.fadeStartX * width;
 
         const mode = settings.mode;
         const cp = { controlX: settings.controlX, controlY: settings.controlY };
@@ -253,7 +584,7 @@ class FadeUIController {
             if (!isFadeIn) {
                 v = 1 - v; // フェードアウトは逆カーブ
             }
-            const x = t * fadeWidth;
+            const x = fadeStartX + (t * fadeWidth);
             const y = (1 - v) * height;
             if (i === 0) {
                 ctx.moveTo(x, y);
@@ -269,7 +600,7 @@ class FadeUIController {
         if (!isFadeIn) {
             vMid = 1 - vMid;
         }
-        const xMid = tMid * fadeWidth;
+        const xMid = fadeStartX + (tMid * fadeWidth);
         const yMid = (1 - vMid) * height;
 
         ctx.fillStyle = '#ffffff';
@@ -280,6 +611,117 @@ class FadeUIController {
         ctx.fill();
         ctx.stroke();
 
+        ctx.restore();
+    }
+    
+    /**
+     * 元波形用のフェードUIを描画（オーバーラップ率モードの時のみ）
+     */
+    drawOriginalFade() {
+        if (this.loopMaker.loopAlgorithm !== 'overlap') return;
+        if (!this.canvasOriginal || !this.ctxOriginal || !this.loopMaker.originalBuffer) return;
+        
+        const width = this.canvasOriginal.width = this.canvasOriginal.offsetWidth;
+        const height = this.canvasOriginal.height = this.canvasOriginal.offsetHeight;
+        this.ctxOriginal.clearRect(0, 0, width, height);
+        
+        const overlapRate = this.loopMaker.overlapRate || 0;
+        if (overlapRate <= 0) {
+            // オーバーラップ率が0の場合は、フェードUIキャンバスを無効化して元波形の範囲操作を有効にする
+            if (this.canvasOriginal) {
+                this.canvasOriginal.style.pointerEvents = 'none';
+            }
+            return;
+        }
+        
+        // フェードUIキャンバスを有効化
+        if (this.canvasOriginal) {
+            this.canvasOriginal.style.pointerEvents = 'auto';
+        }
+        
+        const duration = this.loopMaker.originalBuffer.duration;
+        const useRangeStart = this.loopMaker.useRangeStart;
+        const useRangeEnd = this.loopMaker.useRangeEnd;
+        const useRangeDuration = useRangeEnd - useRangeStart;
+        const overlapDuration = useRangeDuration * (overlapRate / 100);
+        const timeScale = width / duration;
+        
+        // トラック1のフェードイン範囲: 開始位置から、オーバーラップ率の長さまで
+        const track1FadeStart = useRangeStart;
+        const track1FadeEnd = useRangeStart + overlapDuration;
+        const track1FadeStartX = track1FadeStart * timeScale;
+        const track1FadeEndX = track1FadeEnd * timeScale;
+        const track1FadeWidth = track1FadeEndX - track1FadeStartX;
+        
+        // トラック2のフェードアウト範囲: 終了位置からオーバーラップ率の長さを引いた位置から、終了位置まで
+        const track2FadeStart = useRangeEnd - overlapDuration;
+        const track2FadeEnd = useRangeEnd;
+        const track2FadeStartX = track2FadeStart * timeScale;
+        const track2FadeEndX = track2FadeEnd * timeScale;
+        const track2FadeWidth = track2FadeEndX - track2FadeStartX;
+        
+        if (track1FadeWidth > 0) {
+            this.drawOriginalFadeCurve('original-track1', track1FadeStartX, track1FadeWidth, height, true);
+        }
+        
+        if (track2FadeWidth > 0) {
+            this.drawOriginalFadeCurve('original-track2', track2FadeStartX, track2FadeWidth, height, false);
+        }
+    }
+    
+    /**
+     * 元波形用のフェードカーブを描画
+     */
+    drawOriginalFadeCurve(track, fadeStartX, fadeWidth, height, isFadeIn) {
+        const settings = track === 'original-track1'
+            ? this.loopMaker.fadeSettingsTrack1
+            : this.loopMaker.fadeSettingsTrack2;
+        
+        if (!settings) return;
+        
+        const mode = settings.mode;
+        const cp = { controlX: settings.controlX, controlY: settings.controlY };
+        const ctx = this.ctxOriginal;
+        
+        // カーブ描画
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = track === 'original-track1' ? 'rgba(102, 126, 234, 0.9)' : 'rgba(118, 75, 162, 0.9)';
+        ctx.beginPath();
+        const steps = 64;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            let v = FadeCurves.evaluate(mode, t, cp);
+            if (!isFadeIn) {
+                v = 1 - v; // フェードアウトは逆カーブ
+            }
+            const x = fadeStartX + (t * fadeWidth);
+            const y = (1 - v) * height;
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // コントロールポイントを描画（カーブ上の t=0.5 相当位置）
+        const tMid = 0.5;
+        let vMid = FadeCurves.evaluate(mode, tMid, cp);
+        if (!isFadeIn) {
+            vMid = 1 - vMid;
+        }
+        const xMid = fadeStartX + (tMid * fadeWidth);
+        const yMid = (1 - vMid) * height;
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(xMid, yMid, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
         ctx.restore();
     }
 }

@@ -112,6 +112,36 @@ class AudioProcessor {
         return mixedBuffer;
     }
 
+    // バッファを指定した長さに切り詰める
+    truncateBuffer(audioBuffer, maxDuration) {
+        if (!audioBuffer || maxDuration <= 0) {
+            return audioBuffer;
+        }
+
+        const sampleRate = audioBuffer.sampleRate;
+        const numChannels = audioBuffer.numberOfChannels;
+        const originalDuration = audioBuffer.duration;
+        
+        // 既に指定長以下の場合はそのまま返す
+        if (originalDuration <= maxDuration) {
+            return audioBuffer;
+        }
+
+        const frameCount = Math.floor(maxDuration * sampleRate);
+        const truncatedBuffer = this.audioContext.createBuffer(numChannels, frameCount, sampleRate);
+
+        for (let channel = 0; channel < numChannels; channel++) {
+            const inputData = audioBuffer.getChannelData(channel);
+            const outputData = truncatedBuffer.getChannelData(channel);
+
+            for (let i = 0; i < frameCount && i < inputData.length; i++) {
+                outputData[i] = inputData[i];
+            }
+        }
+
+        return truncatedBuffer;
+    }
+
     // ミックスしたバッファを保存
     saveMixedBuffer(mixedBuffer, filename = 'loopmaker_output.wav') {
         const wav = this.bufferToWav(mixedBuffer);

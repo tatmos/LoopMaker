@@ -11,7 +11,7 @@
         <header>
             <h1>LoopMaker</h1>
             <p class="subtitle">誰でも簡単に使えるループ波形エディタ by <a href="https://github.com/sponsors/tatmos">tatmos</a></p>
-            <div class="app-version">v1.2.0</div>
+            <div class="app-version">v1.3.0</div>
         </header>
 
         <div class="controls-panel">
@@ -40,6 +40,7 @@
                 <div class="waveform-wrapper drop-zone" id="original-drop-zone">
                     <div class="drop-overlay" id="drop-overlay">波形をアップロード</div>
                     <canvas id="original-waveform" class="waveform-canvas"></canvas>
+                    <canvas id="fade-ui-original" class="fade-ui-canvas"></canvas>
                 </div>
                 <div id="ruler-original" class="time-ruler"></div>
                 <div id="range-detail-container" class="range-detail-container hidden">
@@ -157,14 +158,37 @@
 
         <div class="loop-controls">
             <div class="loop-info">
-                <label for="overlap-rate">オーバーラップ率:</label>
-                <span id="overlap-rate-value">0%</span>
+                <label for="loop-algorithm">ループアルゴリズム:</label>
+                <select id="loop-algorithm" class="algorithm-select" disabled>
+                    <option value="overlap">オーバーラップ率</option>
+                    <option value="tail">テール時間</option>
+                </select>
             </div>
-            <div class="slider-container">
-                <input type="range" id="overlap-rate" class="slider" min="0" max="50" value="0" disabled>
-                <div class="slider-labels">
-                    <span>0%</span>
-                    <span>50%</span>
+            
+            <!-- オーバーラップ率UI -->
+            <div id="overlap-rate-ui" class="algorithm-ui">
+                <div class="loop-info">
+                    <label for="overlap-rate">オーバーラップ率:</label>
+                    <span id="overlap-rate-value">0%</span>
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="overlap-rate" class="slider" min="0" max="50" value="0" disabled>
+                    <div class="slider-labels">
+                        <span>0%</span>
+                        <span>50%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- テール時間UI -->
+            <div id="tail-time-ui" class="algorithm-ui hidden">
+                <div class="loop-info">
+                    <label for="tail-time">テール時間:</label>
+                    <span id="tail-time-value">0.00s</span>
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="tail-time" class="slider" min="0" max="10" step="0.01" value="0" disabled>
+                    <div id="tail-time-ruler" class="time-ruler tail-time-ruler"></div>
                 </div>
             </div>
         </div>
@@ -193,11 +217,13 @@
     <script src="track2Processor.js"></script>
     <script src="audioPlayer.js"></script>
     <script src="audioProcessor.js"></script>
+    <script src="loopAlgorithm.js"></script>
     <script src="originalWaveformViewer.js"></script>
     <script src="fadeUIController.js"></script>
     <script src="rangeDetailController.js"></script>
     <script src="uiController.js"></script>
     <script src="overlapRateController.js"></script>
+    <script src="tailTimeController.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
