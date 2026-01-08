@@ -430,15 +430,11 @@ class FadeUIController {
     render() {
         this.drawTrackFade(this.ctx1, this.canvas1, 'track1', true);
         this.drawTrackFade(this.ctx2, this.canvas2, 'track2', false);
-        // オーバーラップ率モードの時のみ元波形にフェードUIを表示
-        if (this.loopMaker.loopAlgorithm === 'overlap' && this.canvasOriginal && this.ctxOriginal) {
+        // オーバーラップ率モードまたはテール時間モードの時、元波形にフェードUIを表示
+        if ((this.loopMaker.loopAlgorithm === 'overlap' || this.loopMaker.loopAlgorithm === 'tail') && this.canvasOriginal && this.ctxOriginal) {
             this.drawOriginalFade();
-            // オーバーラップ率が0の場合は、フェードUIキャンバスを無効化して元波形の範囲操作を有効にする
-            if (this.loopMaker.overlapRate === 0) {
-                this.canvasOriginal.style.pointerEvents = 'none';
-            }
         } else if (this.canvasOriginal && this.ctxOriginal) {
-            // テール時間モードの時は非表示
+            // その他の場合は非表示
             this.ctxOriginal.clearRect(0, 0, this.canvasOriginal.width, this.canvasOriginal.height);
             this.canvasOriginal.style.pointerEvents = 'none';
         }
@@ -572,24 +568,15 @@ class FadeUIController {
     }
     
     /**
-     * 元波形用のフェードUIを描画（オーバーラップ率モードの時のみ）
+     * 元波形用のフェードUIを描画（オーバーラップ率モードまたはテール時間モードの時）
      */
     drawOriginalFade() {
-        if (this.loopMaker.loopAlgorithm !== 'overlap') return;
+        if (this.loopMaker.loopAlgorithm !== 'overlap' && this.loopMaker.loopAlgorithm !== 'tail') return;
         if (!this.canvasOriginal || !this.ctxOriginal || !this.loopMaker.originalBuffer) return;
         
         const width = this.canvasOriginal.width = this.canvasOriginal.offsetWidth;
         const height = this.canvasOriginal.height = this.canvasOriginal.offsetHeight;
         this.ctxOriginal.clearRect(0, 0, width, height);
-        
-        const overlapRate = this.loopMaker.overlapRate || 0;
-        if (overlapRate <= 0) {
-            // オーバーラップ率が0の場合は、フェードUIキャンバスを無効化して元波形の範囲操作を有効にする
-            if (this.canvasOriginal) {
-                this.canvasOriginal.style.pointerEvents = 'none';
-            }
-            return;
-        }
         
         // 元波形上のフェードUIは表示のみで、操作は無効化
         // イベントを元波形キャンバスに通すため、pointer-eventsをnoneにする
@@ -600,20 +587,54 @@ class FadeUIController {
         const duration = this.loopMaker.originalBuffer.duration;
         const useRangeStart = this.loopMaker.useRangeStart;
         const useRangeEnd = this.loopMaker.useRangeEnd;
-        const useRangeDuration = useRangeEnd - useRangeStart;
-        const overlapDuration = useRangeDuration * (overlapRate / 100);
         const timeScale = width / duration;
         
-        // トラック1のフェードイン範囲: 開始位置から、オーバーラップ率の長さまで
-        const track1FadeStart = useRangeStart;
-        const track1FadeEnd = useRangeStart + overlapDuration;
+        let track1FadeStart = 0;
+        let track1FadeEnd = 0;
+        let track2FadeStart = 0;
+        let track2FadeEnd = 0;
+        
+        if (this.loopMaker.loopAlgorithm === 'overlap') {
+            // オーバーラップ率モード
+            const overlapRate = this.loopMaker.overlapRate || 0;
+            if (overlapRate <= 0) {
+                // オーバーラップ率が0の場合は、フェードUIキャンバスを無効化して元波形の範囲操作を有効にする
+                if (this.canvasOriginal) {
+                    this.canvasOriginal.style.pointerEvents = 'none';
+                }
+                return;
+            }
+            
+            const useRangeDuration = useRangeEnd - useRangeStart;
+            const overlapDuration = useRangeDuration * (overlapRate / 100);
+            
+            // トラック1のフェードイン範囲: 開始位置から、オーバーラップ率の長さまで
+            track1FadeStart = useRangeStart;
+            track1FadeEnd = useRangeStart + overlapDuration;
+            
+            // トラック2のフェードアウト範囲: 終了位置からオーバーラップ率の長さを引いた位置から、終了位置まで
+            track2FadeStart = useRangeEnd - overlapDuration;
+            track2FadeEnd = useRangeEnd;
+        } else if (this.loopMaker.loopAlgorithm === 'tail') {
+            // テール時間モード
+            const tailTime = this.loopMaker.tailTime || 0;
+            if (tailTime <= 0) {
+                return;
+            }
+            
+            // トラック1のフェードイン範囲: 利用範囲の開始位置から、テール時間分の長さまで
+            track1FadeStart = useRangeStart;
+            track1FadeEnd = useRangeStart + tailTime;
+            
+            // トラック2のフェードアウト範囲: 利用範囲の終了位置から、テール時間分の長さ（元波形の終端まで）
+            track2FadeStart = useRangeEnd;
+            track2FadeEnd = Math.min(duration, useRangeEnd + tailTime);
+        }
+        
         const track1FadeStartX = track1FadeStart * timeScale;
         const track1FadeEndX = track1FadeEnd * timeScale;
         const track1FadeWidth = track1FadeEndX - track1FadeStartX;
         
-        // トラック2のフェードアウト範囲: 終了位置からオーバーラップ率の長さを引いた位置から、終了位置まで
-        const track2FadeStart = useRangeEnd - overlapDuration;
-        const track2FadeEnd = useRangeEnd;
         const track2FadeStartX = track2FadeStart * timeScale;
         const track2FadeEndX = track2FadeEnd * timeScale;
         const track2FadeWidth = track2FadeEndX - track2FadeStartX;
